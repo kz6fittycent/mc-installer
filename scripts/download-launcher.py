@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import gi  # in package python3-gi
-gi.require_version('Gtk', '4.0')
+gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, GLib
 import requests
 import math
