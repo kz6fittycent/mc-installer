@@ -1,20 +1,17 @@
 name: mc-installer
 title: Minecraft Installer
 version: '11.0'
-
 summary: A simple installer for Minecraft - Java Edition
 description: | 
   A simple installer for Minecraft - Java Edition.
 license: MIT
-
 assumes:
   - command-chain
   
-base: core22
+base: core20
 grade: stable
 confinement: strict
 compression: lzo
-
 architectures:
   - build-on: amd64
     
@@ -23,10 +20,10 @@ plugs:
     interface: personal-files
     write:
       - $HOME/.minecraft
-
 apps:
   mc-installer:
-    extensions: [gnome]
+    extensions:
+      - gnome-3-38
     command: launch
     command-chain: 
       - bin/homeishome-launch    
@@ -36,13 +33,13 @@ apps:
       - audio-playback
       - browser-support
       - home
-      - dot-minecraft      
+      - dot-minecraft   
+      - removable-media
     environment:
-      PYTHONPATH: $SNAP_DESKTOP_RUNTIME/usr/lib/python3.10/site-packages
+      PYTHONPATH: $SNAP_DESKTOP_RUNTIME/usr/lib/python3.8/site-packages
       JAVA_HOME: $SNAP/usr/lib/jvm/java-17-openjdk-amd64/
       __NV_PRIME_RENDER_OFFLOAD: 1
       __GLX_VENDOR_LIBRARY_NAME: nvidia      
-
 parts:
   launcher:
     plugin: dump
@@ -52,7 +49,6 @@ parts:
     plugin: nil
     stage-snaps:
       - homeishome-launch        
-
   game:
     plugin: nil
     build-packages:
@@ -69,7 +65,6 @@ parts:
       - libcurl4
       - x11-xserver-utils
       - libflite1
-      - libpango1.0-dev
      
   cleanup:
     after: 
@@ -77,10 +72,10 @@ parts:
       - launcher
     plugin: nil
     build-snaps: 
-      - core22
-      - gnome-42-2204
+      - core20
+      - gnome-3-38-2004
     override-prime: |
       set -eux
-      for snap in "core22" "gnome-42-2204"; do  # List all content-snaps and base snaps you're using here
+      for snap in "core20" "gnome-3-38-2004"; do  # List all content-snaps and base snaps you're using here
         cd "/snap/$snap/current" && find . -type f,l -exec rm -f "$SNAPCRAFT_PRIME/{}" \;
       done
