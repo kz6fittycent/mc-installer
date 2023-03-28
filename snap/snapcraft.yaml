@@ -8,7 +8,7 @@ license: MIT
 assumes:
   - command-chain
   
-base: core20
+base: core22
 grade: stable
 confinement: strict
 compression: lzo
@@ -23,7 +23,7 @@ plugs:
 apps:
   mc-installer:
     extensions:
-      - gnome-3-38
+      - gnome
     command: launch
     command-chain: 
       - bin/homeishome-launch    
@@ -73,10 +73,10 @@ parts:
       - launcher
     plugin: nil
     build-snaps: 
-      - core20
-      - gnome-3-38-2004
+      - core22
+      - gnome-42-2204
     override-prime: |
       set -eux
-      for snap in "core20" "gnome-3-38-2004"; do  # List all content-snaps and base snaps you're using here
+      for snap in "core22" "gnome-42-2204"; do  # List all content-snaps and base snaps you're using here
         cd "/snap/$snap/current" && find . -type f,l -exec rm -f "$SNAPCRAFT_PRIME/{}" \;
       done
