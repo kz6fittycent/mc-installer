@@ -10,3 +10,8 @@ Type=Application
 StartupNotify=false
 Categories=Application;Game
 Keywords=mc-installer;
+Actions=Logs;
+
+[Desktop Action Logs]
+Name=Logs
+Exec=mc-installer.logs

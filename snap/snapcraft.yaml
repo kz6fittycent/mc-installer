@@ -40,6 +40,14 @@ apps:
       JAVA_HOME: $SNAP/usr/lib/jvm/java-17-openjdk-amd64/
       __NV_PRIME_RENDER_OFFLOAD: 1
       __GLX_VENDOR_LIBRARY_NAME: nvidia      
+      HOME: $SNAP_USER_COMMON
+  logs:
+    extensions:
+      - gnome
+    command: logs
+    environment:
+      HOME: $SNAP_USER_COMMON
+
 parts:
   launcher:
     plugin: dump

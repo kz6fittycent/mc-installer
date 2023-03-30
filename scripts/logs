@@ -1,0 +1,8 @@
+#!/bin/bash
+
+if [ ! -d $SNAP_USER_COMMON/.minecraft/logs ];
+then
+	mkdir -p $SNAP_USER_COMMON/.minecraft/logs
+fi
+
+xdg-open $SNAP_USER_COMMON/.minecraft/logs
