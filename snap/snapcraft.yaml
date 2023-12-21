@@ -1,11 +1,9 @@
 name: mc-installer
 title: Minecraft Installer
 version: '13.0'
-
 summary: A simple installer for Minecraft - Java Edition
 description: | 
   A simple installer for Minecraft - Java Edition.
-license: MIT
 
 assumes:
   - command-chain
@@ -14,6 +12,13 @@ base: core20
 grade: stable
 confinement: strict
 compression: lzo
+
+website: https://github.com/kz6fittycent/mc-installer
+contact: https://github.com/kz6fittycent/mc-installer/issues
+issues: https://github.com/kz6fittycent/mc-installer/issues
+source-code: https://github.com/kz6fittycent/mc-installer
+icon: snap/gui/mcinstaller.png
+license: MIT
 
 architectures:
   - build-on: amd64
