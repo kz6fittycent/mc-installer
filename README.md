@@ -22,3 +22,7 @@ Enjoy!
 * [galgalesh](https://github.com/galgalesh)
 * [popey](https://github.com/popey)
 * [tommytran732](https://github.com/tommytran732)
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=kz6fittycent/mc-installer&type=Date)](https://star-history.com/#kz6fittycent/mc-installer&Date)
