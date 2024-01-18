@@ -2,11 +2,6 @@
 
 [![Minecraft Installer](https://snapcraft.io/mc-installer/badge.svg)](https://snapcraft.io/mc-installer)
 
-## A SPECIAL NOTE ABOUT LOG4J
-`mc-installer` will always attempt to download the latest version of Minecraft. Version `1.18.1` is considered secure.
-
-Go here to learn more: https://www.minecraft.net/en-us/article/important-message--security-vulnerability-java-edition?ref=launcher
-
 ## Installation
 `sudo snap install mc-installer`
 
