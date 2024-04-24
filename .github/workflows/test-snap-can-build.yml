@@ -2,9 +2,9 @@ name: 🧪 Test snap can be built on x86_64
 
 on:
   push:
-    branches: [ ** ]
+    branches: [ test ]
   pull_request:
-    branches: [ ** ]
+    branches: [ test ]
     
 jobs:
   build:
