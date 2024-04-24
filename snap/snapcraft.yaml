@@ -1,6 +1,6 @@
 name: mc-installer
 title: Minecraft Installer
-version: '13.0'
+version: '14.0'
 summary: A simple installer for Minecraft - Java Edition
 description: | 
   A simple installer for Minecraft - Java Edition.
