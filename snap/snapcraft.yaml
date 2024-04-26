@@ -5,6 +5,11 @@ summary: A simple installer for Minecraft - Java Edition
 description: | 
   A simple installer for Minecraft - Java Edition.
 license: MIT
+website: https://minecraft.net
+contact: https://github.com/kz6fittycent/mc-installer/issues
+issues: https://github.com/kz6fittycent/mc-installer/issues
+source-code: https://github.com/kz6fittycent/mc-installer
+icon: snap/gui/mcinstaller.png
 assumes:
   - command-chain
   
