@@ -1,6 +1,6 @@
 name: mc-installer
 title: Minecraft Installer
-adopt-info: mc-installer
+adopt-info: launcher
 summary: A simple installer for Minecraft - Java Edition
 description: | 
   A simple installer for Minecraft - Java Edition.
