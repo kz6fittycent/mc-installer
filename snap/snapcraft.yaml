@@ -1,6 +1,6 @@
 name: mc-installer
 title: Minecraft Installer
-version: '14.0'
+adopt-info: mc-installer
 summary: A simple installer for Minecraft - Java Edition
 description: | 
   A simple installer for Minecraft - Java Edition.
@@ -45,10 +45,15 @@ parts:
     plugin: dump
     source: scripts
     
+    override-pull: |
+      snapcraftctl pull
+      snapcraftctl set-version "$(git describe --tags | sed 's/^v//' | cut -d "-" -f1)"
+      
   homeishome-launch:
     plugin: nil
     stage-snaps:
-      - homeishome-launch        
+      - homeishome-launch    
+      
   game:
     plugin: nil
     build-packages:
