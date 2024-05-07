@@ -1,22 +1,15 @@
 name: mc-installer
 title: Minecraft Installer
-<<<<<<< Updated upstream
 adopt-info: launcher
-=======
-version: '14.0'
->>>>>>> Stashed changes
 summary: A simple installer for Minecraft - Java Edition
 description: | 
   A simple installer for Minecraft - Java Edition.
 license: MIT
-<<<<<<< Updated upstream
 website: https://minecraft.net
 contact: https://github.com/kz6fittycent/mc-installer/issues
 issues: https://github.com/kz6fittycent/mc-installer/issues
 source-code: https://github.com/kz6fittycent/mc-installer
 icon: snap/gui/mcinstaller.png
-=======
->>>>>>> Stashed changes
 assumes:
   - command-chain
   
@@ -64,12 +57,8 @@ parts:
   homeishome-launch:
     plugin: nil
     stage-snaps:
-<<<<<<< Updated upstream
-      - homeishome-launch    
-      
-=======
-      - homeishome-launch        
->>>>>>> Stashed changes
+      - homeishome-launch  
+        
   game:
     plugin: nil
     build-packages:
