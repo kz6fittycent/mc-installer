@@ -13,12 +13,14 @@ icon: snap/gui/mcinstaller.png
 assumes:
   - command-chain
   
-base: core22
+base: core24
 grade: stable
 confinement: strict
 compression: lzo
-architectures:
-  - build-on: amd64
+platforms:
+  amd64:
+    build-on: [amd64]
+    build-for: [amd64]
     
 plugs:
   dot-minecraft:
@@ -51,8 +53,8 @@ parts:
     source: scripts
     
     override-pull: |
-      snapcraftctl pull
-      snapcraftctl set-version "$(git describe --tags | sed 's/^v//' | cut -d "-" -f1)"
+      craftctl default
+      craftctl set version="$(git describe --tags | sed 's/^v//' | cut -d "-" -f1)"
       
   homeishome-launch:
     plugin: nil
@@ -87,6 +89,6 @@ parts:
       - gnome-42-2204
     override-prime: |
       set -eux
-      for snap in "core22" "gnome-42-2204"; do  # List all content-snaps and base snaps you're using here
-        cd "/snap/$snap/current" && find . -type f,l -exec rm -f "$SNAPCRAFT_PRIME/{}" \;
+      for snap in "core24" "gnome-42-2204"; do  # List all content-snaps and base snaps you're using here
+        cd "/snap/$snap/current" && find . -type f,l -exec rm -f "$CRAFT_PRIME/{}" \;
       done
