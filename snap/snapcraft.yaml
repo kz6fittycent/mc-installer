@@ -11,8 +11,6 @@ issues: https://github.com/kz6fittycent/mc-installer/issues
 source-code: https://github.com/kz6fittycent/mc-installer
 icon: snap/gui/mcinstaller.png
 donation: https://www.patreon.com/kz6fittycent
-assumes:
-  - command-chain
   
 base: core24
 grade: stable
@@ -33,8 +31,6 @@ apps:
     extensions:
       - gnome
     command: launch
-    command-chain: 
-      - bin/homeishome-launch    
     plugs:
       - network
       - opengl
@@ -56,12 +52,7 @@ parts:
     override-pull: |
       craftctl default
       craftctl set version="$(git describe --tags | sed 's/^v//' | cut -d "-" -f1)"
-      
-  homeishome-launch:
-    plugin: nil
-    stage-snaps:
-      - homeishome-launch  
-        
+       
   game:
     plugin: nil
     build-packages:
