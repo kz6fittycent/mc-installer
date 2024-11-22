@@ -10,6 +10,8 @@ contact: https://github.com/kz6fittycent/mc-installer/issues
 issues: https://github.com/kz6fittycent/mc-installer/issues
 source-code: https://github.com/kz6fittycent/mc-installer
 icon: snap/gui/mcinstaller.png
+donation: https://www.patreon.com/kz6fittycent
+
 assumes:
   - command-chain
   
