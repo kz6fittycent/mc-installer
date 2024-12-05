@@ -12,6 +12,9 @@ This does not come WITH Minecraft pre-installed. It simply downloads the `.jar` 
 
 Enjoy!
 
+#### If you like what I'm doing, please consider supporting me on Patreon!
+[![Patreon](https://img.shields.io/badge/Patreon-F96854?style=for-the-badge&logo=patreon&logoColor=white)](https://www.patreon.com/kz6fittycent)
+
 ### SPECIAL THANKS TO:
 
 * [galgalesh](https://github.com/galgalesh)
