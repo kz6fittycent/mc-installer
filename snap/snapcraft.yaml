@@ -41,7 +41,7 @@ apps:
       - removable-media
     environment:
       PYTHONPATH: $SNAP_DESKTOP_RUNTIME/usr/lib/python3.8/site-packages
-      JAVA_HOME: $SNAP/usr/lib/jvm/java-17-openjdk-amd64/
+      JAVA_HOME: $SNAP/usr/lib/jvm/java-21-openjdk-amd64/
       __NV_PRIME_RENDER_OFFLOAD: 1
       __GLX_VENDOR_LIBRARY_NAME: nvidia      
 parts:
