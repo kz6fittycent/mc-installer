@@ -41,7 +41,7 @@ apps:
       - removable-media
     environment:
       PYTHONPATH: $SNAP_DESKTOP_RUNTIME/usr/lib/python3.8/site-packages
-      JAVA_HOME: $SNAP/usr/lib/jvm/java-21-openjdk-amd64/
+      JAVA_HOME: $SNAP/usr/lib/jvm/java-25-openjdk-amd64/
       __NV_PRIME_RENDER_OFFLOAD: 1
       __GLX_VENDOR_LIBRARY_NAME: nvidia      
 parts:
@@ -56,14 +56,14 @@ parts:
   game:
     plugin: nil
     build-packages:
-      - openjdk-21-jre-headless        
+      - openjdk-25-jre-headless        
       - ca-certificates-java
       - ca-certificates      
     stage-packages:
       - libglu1-mesa
       - libswt-gtk-4-java
       - python3-requests
-      - openjdk-21-jre-headless
+      - openjdk-25-jre-headless
       - libxss1
      # - libgconf-2-4
       - libcurl4
