@@ -39,6 +39,10 @@ apps:
       - home
       - dot-minecraft   
       - removable-media
+      - desktop
+      - desktop-legacy
+      - x11
+      - wayland
     environment:
       PYTHONPATH: $SNAP_DESKTOP_RUNTIME/usr/lib/python3.8/site-packages
       JAVA_HOME: $SNAP/usr/lib/jvm/java-25-openjdk-amd64/
