@@ -1,0 +1,96 @@
+name: 🚀 Promote to Stable
+
+# Fires on any issue comment; the `if:` below narrows it down to a
+# "/promote ..." comment, from someone with write access, on an actual
+# issue (not a PR) - the "Parse revisions" step does the real, exact
+# match against "/promote <revision>[,<revision>...] stable [done]" and
+# fails loudly if the comment doesn't match that. The real gate is the
+# `environment:` on the job itself though - matching those conditions
+# only lets the run start and sit waiting for manual approval, it
+# doesn't release anything by itself.
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  issues: write
+
+env:
+  SNAP_NAME: mc-installer
+
+jobs:
+  promote:
+    if: >
+      github.event.issue.pull_request == null &&
+      startsWith(github.event.comment.body, '/promote ') &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: ubuntu-latest
+    environment: promote-stable
+    steps:
+      - name: Acknowledge the command
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api "repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions" \
+            -f content='+1' --silent
+
+      - name: Parse revisions out of the comment
+        id: parse
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+        run: |
+          # call-for-testing.yml writes the exact command (with the real
+          # revision already filled in) into the issue - this only
+          # accepts an exact "/promote <revision>[,<revision>...] stable
+          # [done]" match, so a copy-pasted command from that issue
+          # always works and anything else fails loudly instead of
+          # silently doing nothing. Bash's own regex match (not grep) so
+          # the optional trailing "done" can be captured as a separate
+          # group alongside the revision list in one pass.
+          #
+          # Trailing whitespace/newline is tolerated (`[[:space:]]*$`
+          # rather than a bare `$`): copying the command out of the
+          # fenced code block call-for-testing.yml renders it in commonly
+          # brings along a trailing newline, and GitHub's own comment box
+          # does too if you hit enter after pasting - neither is a typo
+          # worth failing loudly over the way a wrong revision number or
+          # missing "stable" still should be.
+          if [[ "$COMMENT_BODY" =~ ^/promote\ ([0-9]+(,[0-9]+)*)\ stable(\ done)?[[:space:]]*$ ]]; then
+            revisions="${BASH_REMATCH[1]}"
+            close_issue="${BASH_REMATCH[3]:+true}"
+          else
+            echo "Comment didn't match '/promote <revision>[,<revision>...] stable [done]' exactly: '$COMMENT_BODY'"
+            exit 1
+          fi
+          echo "revisions=${revisions}" >> "$GITHUB_OUTPUT"
+          echo "close-issue=${close_issue:-false}" >> "$GITHUB_OUTPUT"
+
+      - name: Install snapcraft
+        run: sudo snap install snapcraft --classic
+
+      - name: Release to stable
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+          REVISIONS: ${{ steps.parse.outputs.revisions }}
+        run: |
+          IFS=',' read -ra revs <<< "$REVISIONS"
+          for rev in "${revs[@]}"; do
+            snapcraft release "${SNAP_NAME}" "$rev" stable
+          done
+
+      - name: Comment on the issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REVISIONS: ${{ steps.parse.outputs.revisions }}
+        run: |
+          gh issue comment "${ISSUE_NUMBER}" \
+            --repo "${{ github.repository }}" \
+            --body "Revision(s) \`${REVISIONS}\` have been released to \`latest/stable\`. 🎉"
+
+      - name: Close the issue
+        if: steps.parse.outputs.close-issue == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: gh issue close "${ISSUE_NUMBER}" --repo "${{ github.repository }}"

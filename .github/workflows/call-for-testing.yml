@@ -1,0 +1,308 @@
+name: 📣 Call for Testing
+
+# Chained off "🧪 Snap Builds" via workflow_run (rather than its own
+# push: trigger) so this only fires once that workflow has actually
+# passed on master - a PR build/review succeeding doesn't publish
+# anything, and a push to master that FAILS review shouldn't get a
+# candidate release or a testing issue either.
+on:
+  workflow_run:
+    workflows: ["🧪 Snap Builds"]
+    types: [completed]
+    branches: [master]
+
+permissions:
+  contents: read
+
+env:
+  SNAP_NAME: mc-installer
+
+jobs:
+  # Rebuilds from scratch rather than reusing an artifact from the
+  # triggering run, since snap-builds.yml doesn't publish one - same
+  # commit though, checked out via head_sha.
+  publish-candidate:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'master'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      revision: ${{ steps.upload.outputs.revision }}
+    steps:
+      - name: Checkout the built commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Determine the app version
+        id: version
+        run: |
+          # The same expression as the launcher part in snap/snapcraft.yaml.
+          version="$(git describe --tags --match 'v*' | sed 's/^v//' | cut -d "-" -f1)"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Build Snap
+        uses: snapcore/action-build@v1
+        id: build
+        with:
+          # Not "args" - see the matching comment in snap-builds.yml.
+          snapcraft-args: pack
+
+      - name: Upload to the candidate channel
+        id: upload
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        run: |
+          # Not "latest/candidate": a `snapcraft export-login` macaroon's
+          # channel grant is the bare risk levels (stable/candidate/beta/
+          # edge), not track-qualified, so the store rejects the
+          # track-prefixed form with invalid-channel-permission.
+          output="$(snapcraft upload "${{ steps.build.outputs.snap }}" --release=candidate)"
+          echo "$output"
+
+          revision="$(grep -Po 'Revision \K[0-9]+' <<< "$output")"
+          if [[ -z "$revision" ]]; then
+            echo "Could not parse a revision number out of 'snapcraft upload' output."
+            exit 1
+          fi
+          echo "revision=${revision}" >> "$GITHUB_OUTPUT"
+
+      # The version alone doesn't say which commit a revision was built
+      # from (it's the last v* tag, and master moves past it), so record
+      # it: security-rebuild.yml rebuilds stable from this tag.
+      - name: Record the commit this revision was built from
+        run: |
+          git tag "snap-rev-${{ steps.upload.outputs.revision }}" "${{ github.event.workflow_run.head_sha }}"
+          git push origin "snap-rev-${{ steps.upload.outputs.revision }}"
+
+  open-issue:
+    needs: publish-candidate
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    outputs:
+      issue-number: ${{ steps.create.outputs.issue-number }}
+    steps:
+      - name: Ensure the call-for-testing label exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create "call-for-testing" \
+            --repo "${{ github.repository }}" \
+            --color "FBCA04" \
+            --description "Automated candidate build ready for testing" \
+            2>/dev/null || true
+
+      - name: Create the call for testing issue
+        id: create
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.publish-candidate.outputs.version }}
+          REVISION: ${{ needs.publish-candidate.outputs.revision }}
+        run: |
+          # The "/promote <revision>[,<revision>...] stable [done]" syntax
+          # here is what promote-to-stable.yml parses back out of the
+          # triggering comment - keep it in sync with the pattern that
+          # workflow matches if this changes.
+          #
+          # Deliberately "stable", not "latest/stable": the export-login
+          # macaroon's channel grant is the bare risk levels (see the
+          # "Upload to the candidate channel" step above).
+          body=$(cat <<EOF
+          A new candidate build of Minecraft Installer is ready for testing.
+
+          **Version:** ${VERSION}
+          **Revision:** ${REVISION}
+          **Channel:** \`latest/candidate\`
+
+          ## How to test
+
+          1. Install or refresh to this build:
+
+             \`\`\`
+             sudo snap install ${SNAP_NAME} --channel latest/candidate
+             # or, if already installed:
+             sudo snap refresh ${SNAP_NAME} --channel latest/candidate
+             \`\`\`
+
+          2. Launch it. On first run it downloads the Minecraft launcher, then opens it.
+          3. Log in and start a game.
+          4. Automated screenshots from a clean VM will be added to this issue shortly, as a sanity check that the build actually launches.
+
+          ## How to release it
+
+          Once you're satisfied this revision is good, promote it to stable by commenting:
+
+          \`\`\`
+          /promote <revision>[,<revision>...] stable [done]
+          \`\`\`
+
+          - \`<revision>\` - the revision number(s) to release (comma-separated for more than one)
+          - \`stable\` - required as shown; this command only ever promotes to \`stable\`
+          - \`done\` (optional) - also closes this issue once released; leave it off to release and keep the issue open for further testing
+
+          For this revision, that's:
+
+          \`\`\`
+          /promote ${REVISION} stable done
+          \`\`\`
+
+          That queues \`promote-to-stable.yml\` (the \`promote-stable\` environment), which runs \`snapcraft release\`.
+
+          ---
+          _Opened automatically after a successful build on \`master\`._
+          EOF
+          )
+
+          url=$(gh issue create \
+            --repo "${{ github.repository }}" \
+            --title "Call for testing: v${VERSION} (revision ${REVISION})" \
+            --label "call-for-testing" \
+            --body "$body")
+          echo "issue-number=$(basename "$url")" >> "$GITHUB_OUTPUT"
+
+  screenshots:
+    needs: [publish-candidate, open-issue]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Enable KVM access for the runner
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Setup LXD
+        uses: canonical/setup-lxd@v0.1.1
+
+      - name: Install ghvmctl
+        run: |
+          # Retried: the Snap Store's CDN has had transient 502s here.
+          for attempt in 1 2 3; do
+            if sudo snap install ghvmctl; then
+              break
+            fi
+            if [[ "$attempt" == 3 ]]; then
+              echo "::error::snap install ghvmctl failed after 3 attempts"
+              exit 1
+            fi
+            echo "snap install ghvmctl failed (attempt ${attempt}/3), retrying in 30s..."
+            sleep 30
+          done
+          sudo snap connect ghvmctl:lxd lxd:lxd
+
+      - name: Launch a desktop VM and install the candidate snap
+        env:
+          REVISION: ${{ needs.publish-candidate.outputs.revision }}
+        run: |
+          ghvmctl prepare
+
+          # NOT `ghvmctl snap-install`: that subcommand unconditionally
+          # appends `--classic`, which the Snap Store rejects for a
+          # strict-confinement snap. `exec` + a plain `snap install`
+          # sidesteps that.
+          ghvmctl exec "sudo snap install ${SNAP_NAME} --revision ${REVISION}"
+
+          ghvmctl snap-run "${SNAP_NAME}"
+
+          # gnome-screenshot can succeed against the bare desktop before
+          # the app has mapped a window, so it can't be used as a
+          # readiness signal. Longer than a plain app: first run downloads
+          # the Minecraft launcher before opening it.
+          sleep 90
+
+      - name: Capture screenshots
+        run: |
+          ghvmctl screenshot-full
+          ghvmctl screenshot-window
+
+      - name: Publish screenshots to the screenshots branch
+        id: publish
+        env:
+          REVISION: ${{ needs.publish-candidate.outputs.revision }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if git ls-remote --exit-code --heads origin screenshots >/dev/null 2>&1; then
+            git fetch origin screenshots
+            git checkout -B screenshots origin/screenshots
+          else
+            git checkout --orphan screenshots
+            git rm -rf --quiet .
+          fi
+
+          dest="revision-${REVISION}"
+          mkdir -p "$dest"
+          cp -L ~/ghvmctl-screenshots/screenshot-screen.png "$dest/screen.png"
+          cp -L ~/ghvmctl-screenshots/screenshot-window.png "$dest/window.png"
+
+          git add "$dest"
+          git commit -m "Add screenshots for revision ${REVISION}"
+
+          # Retried, re-fetching and rebasing in case of a real concurrent
+          # push rather than a flaky first attempt.
+          for attempt in 1 2 3; do
+            if git push origin screenshots; then
+              break
+            fi
+            if [[ "$attempt" == 3 ]]; then
+              echo "::error::git push to the screenshots branch failed after 3 attempts"
+              exit 1
+            fi
+            echo "git push failed (attempt ${attempt}/3), retrying in 10s..."
+            sleep 10
+            git fetch origin screenshots
+            git rebase origin/screenshots
+          done
+
+          echo "dest=${dest}" >> "$GITHUB_OUTPUT"
+
+      - name: Comment on the call for testing issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ needs.open-issue.outputs.issue-number }}
+          REVISION: ${{ needs.publish-candidate.outputs.revision }}
+          DEST: ${{ steps.publish.outputs.dest }}
+        run: |
+          base="https://raw.githubusercontent.com/${{ github.repository }}/screenshots/${DEST}"
+          gh issue comment "${ISSUE_NUMBER}" \
+            --repo "${{ github.repository }}" \
+            --body "$(cat <<EOF
+          Automated screenshots from revision ${REVISION}, installed fresh in a clean Ubuntu desktop VM:
+
+          ![Full screen](${base}/screen.png)
+
+          ![App window](${base}/window.png)
+
+          ---
+
+          Looks good? Comment \`/promote ${REVISION} stable done\` on this issue to release it to \`latest/stable\` and close this issue (drop \`done\` to release without closing).
+          EOF
+          )"
+
+      # Without this, a failure above (VM/snap infra flakiness) leaves the
+      # issue saying screenshots are "coming shortly" forever.
+      - name: Comment on the issue if screenshot capture failed
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ needs.open-issue.outputs.issue-number }}
+        run: |
+          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          gh issue comment "${ISSUE_NUMBER}" \
+            --repo "${{ github.repository }}" \
+            --body "$(cat <<EOF
+          Automated screenshot capture failed for this revision - most likely a transient infrastructure hiccup (the Snap Store's CDN or GitHub itself), not a problem with the build. See the [workflow run](${run_url}) for details.
+
+          The build itself is unaffected - go ahead and test it manually using the install command above.
+          EOF
+          )"

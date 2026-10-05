@@ -1,0 +1,265 @@
+name: 🛡️ Security Rebuild
+
+# Once a day, runs the Snap Store's own security check
+# (review-tools.snap-check-notices - the same check behind the store's
+# "a rebuild would fix this" emails) against the snap published on stable.
+# When Ubuntu has published fixes for packages bundled in it (OpenJDK,
+# Mesa, GTK, ...), this:
+#
+# 1. rebuilds the snap from the exact commit that stable revision was built
+#    from - never from master, which may hold unreleased work. That commit
+#    is the "snap-rev-<revision>" tag call-for-testing.yml (and this
+#    workflow) push for every revision uploaded. The version comes from the
+#    last v* tag, so the rebuild has the same version as stable;
+# 2. checks the new build, and uploads it to the candidate channel;
+# 3. opens a call-for-testing issue (labels: call-for-testing,
+#    security-rebuild) listing the notices it fixes. Release it with the
+#    usual "/promote <revision> stable done" comment (promote-to-stable.yml).
+#
+# Nothing happens while a security-rebuild issue is still open, so an
+# unreleased rebuild isn't rebuilt again every day.
+#
+# Run it by hand from the Actions tab (Run workflow):
+# - dry_run: checks and reports, but builds, uploads, and opens nothing
+# - force: rebuilds even if there are no notices (to test the pipeline)
+
+on:
+  schedule:
+    - cron: "37 9 * * *"  # daily, 09:37 UTC
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only check and report - don't build, upload, or open an issue"
+        type: boolean
+        default: true
+      force:
+        description: "Rebuild even if there are no security notices"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-rebuild
+  cancel-in-progress: false
+
+env:
+  SNAP_NAME: mc-installer
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+    outputs:
+      rebuild: ${{ steps.decide.outputs.rebuild }}
+      version: ${{ steps.stable.outputs.version }}
+      stable_revision: ${{ steps.stable.outputs.revision }}
+      commit: ${{ steps.commit.outputs.commit }}
+    steps:
+      - name: Checkout (full history and tags, to find the release commit)
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Install review-tools
+        run: |
+          # Retried: the Snap Store's CDN has had transient failures.
+          for attempt in 1 2 3; do
+            sudo snap install review-tools && break
+            [[ "$attempt" == 3 ]] && { echo "::error::snap install review-tools failed"; exit 1; }
+            sleep 30
+          done
+
+      - name: Download the stable snap
+        id: stable
+        run: |
+          snap download "$SNAP_NAME" --channel=stable --basename=stable
+          version="$(unsquashfs -cat stable.snap meta/snap.yaml | sed -n 's/^version: *//p' | tr -d "'\"")"
+          revision="$(snap info "$SNAP_NAME" | sed -n 's#^ *latest/stable: *[^ ]* *[^ ]* *(\([0-9]*\)).*#\1#p')"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+          echo "Stable: version $version, revision $revision"
+
+      - name: Check for security notices
+        run: |
+          review-tools.snap-check-notices stable.snap | tee notices-raw.json
+          # {"<snap>": {"<revision>": {"<package>": ["USN-...", ...]}}} - empty when none.
+          python3 - <<'EOF'
+          import json
+          raw = json.load(open("notices-raw.json"))
+          notices = next(iter(next(iter(raw.values())).values()), {}) if raw else {}
+          json.dump(notices, open("notices.json", "w"), indent=2, sort_keys=True)
+          print(f"{sum(len(v) for v in notices.values())} notice(s) across {len(notices)} package(s)")
+          EOF
+
+      - name: Find the commit stable was built from
+        id: commit
+        env:
+          REVISION: ${{ steps.stable.outputs.revision }}
+        run: |
+          # Refuses rather than guessing (e.g. from the v* tag, which
+          # master has usually moved past): rebuilding the wrong commit
+          # would ship different code under the stable version number.
+          if ! commit="$(git rev-parse --verify --quiet "refs/tags/snap-rev-${REVISION}^{commit}")"; then
+            echo "::error::No snap-rev-${REVISION} tag - don't know which commit stable revision ${REVISION} was built from. Tag it by hand: git tag snap-rev-${REVISION} <commit> && git push origin snap-rev-${REVISION}"
+            exit 1
+          fi
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "Stable revision ${REVISION} was built from: $(git log -1 --format='%h %s' "$commit")"
+
+      - name: Decide
+        id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FORCE: ${{ inputs.force }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          count="$(python3 -c "import json; print(sum(len(v) for v in json.load(open('notices.json')).values()))")"
+          open_issue="$(gh issue list --repo "$GITHUB_REPOSITORY" --label security-rebuild --state open --json number --jq '.[0].number // empty')"
+          rebuild=false
+          if [[ -n "$open_issue" ]]; then
+            echo "Security rebuild issue #$open_issue is still open - not rebuilding again."
+          elif [[ "$count" -gt 0 || "$FORCE" == "true" ]]; then
+            rebuild=true
+          else
+            echo "No security notices - nothing to do."
+          fi
+          if [[ "$DRY_RUN" == "true" && "$rebuild" == "true" ]]; then
+            echo "Dry run: would rebuild version ${{ steps.stable.outputs.version }} from ${{ steps.commit.outputs.commit }}."
+            rebuild=false
+          fi
+          echo "rebuild=$rebuild" >> "$GITHUB_OUTPUT"
+
+      - name: Keep the notices for the next job
+        uses: actions/upload-artifact@v7
+        with:
+          name: notices
+          path: notices.json
+
+  rebuild:
+    needs: check
+    if: needs.check.outputs.rebuild == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      revision: ${{ steps.upload.outputs.revision }}
+    steps:
+      - name: Checkout the release commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.check.outputs.commit }}
+          # For the version (git describe --tags, see snap/snapcraft.yaml).
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Build Snap
+        uses: snapcore/action-build@v1
+        id: build
+        with:
+          snapcraft-args: pack
+
+      - name: Check the new build
+        run: |
+          for attempt in 1 2 3; do
+            sudo snap install review-tools && break
+            [[ "$attempt" == 3 ]] && exit 1
+            sleep 30
+          done
+          review-tools.snap-check-notices "${{ steps.build.outputs.snap }}" | tee rebuilt-notices.json
+
+      - name: Upload to the candidate channel
+        id: upload
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        run: |
+          # "candidate", not "latest/candidate" - see call-for-testing.yml.
+          output="$(snapcraft upload "${{ steps.build.outputs.snap }}" --release=candidate)"
+          echo "$output"
+          revision="$(grep -Po 'Revision \K[0-9]+' <<< "$output")"
+          [[ -n "$revision" ]] || { echo "Could not parse a revision from 'snapcraft upload'"; exit 1; }
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+
+      # So the next check can find this revision's commit once it's stable.
+      - name: Record the commit this revision was built from
+        run: |
+          git tag "snap-rev-${{ steps.upload.outputs.revision }}" "${{ needs.check.outputs.commit }}"
+          git push origin "snap-rev-${{ steps.upload.outputs.revision }}"
+
+  open-issue:
+    needs: [check, rebuild]
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Download the notices
+        uses: actions/download-artifact@v8
+        with:
+          name: notices
+
+      - name: Open the call for testing issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.check.outputs.version }}
+          STABLE_REVISION: ${{ needs.check.outputs.stable_revision }}
+          REVISION: ${{ needs.rebuild.outputs.revision }}
+          COMMIT: ${{ needs.check.outputs.commit }}
+        run: |
+          for label in call-for-testing security-rebuild; do
+            gh label create "$label" --repo "$GITHUB_REPOSITORY" --color "B60205" \
+              --description "Automated rebuild picking up Ubuntu security fixes" 2>/dev/null || true
+          done
+
+          notices="$(python3 - <<'EOF'
+          import json
+          notices = json.load(open("notices.json"))
+          if not notices:
+              print("_None - this rebuild was started by hand (force)._")
+          for package, usns in sorted(notices.items()):
+              links = ", ".join(f"[{u}](https://ubuntu.com/security/notices/{u})" for u in usns)
+              print(f"- `{package}`: {links}")
+          EOF
+          )"
+
+          body=$(cat <<EOF
+          A security rebuild of Minecraft Installer is ready for testing.
+
+          Ubuntu has published security fixes for packages bundled in the current stable snap (revision ${STABLE_REVISION}). This build is the **same version, ${VERSION}**, rebuilt from the commit stable was built from (\`${COMMIT:0:7}\`) so it picks up those fixes. Nothing else has changed.
+
+          ## Fixed notices
+
+          ${notices}
+
+          **Revision:** ${REVISION} · **Channel:** \`latest/candidate\`
+
+          ## How to test
+
+          \`\`\`
+          sudo snap refresh ${SNAP_NAME} --channel latest/candidate
+          \`\`\`
+
+          Open it and make sure the Minecraft launcher starts and a game runs.
+
+          ## How to release it
+
+          Comment:
+
+          \`\`\`
+          /promote ${REVISION} stable done
+          \`\`\`
+
+          That queues \`promote-to-stable.yml\` (the \`promote-stable\` environment) and closes this issue once released. Until this issue is closed, the daily check won't rebuild again.
+
+          ---
+          _Opened automatically by \`security-rebuild.yml\`._
+          EOF
+          )
+
+          gh issue create --repo "$GITHUB_REPOSITORY" \
+            --title "Security rebuild: v${VERSION} (revision ${REVISION})" \
+            --label call-for-testing --label security-rebuild \
+            --body "$body"

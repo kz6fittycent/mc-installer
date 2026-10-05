@@ -1,0 +1,38 @@
+name: 🧪 Snap Builds
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+        with:
+          # The snap's version comes from `git describe --tags` (see the
+          # launcher part in snap/snapcraft.yaml), which needs the tags.
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Build Snap
+        uses: snapcore/action-build@v1
+        id: build
+        with:
+          # Not "args" - the action renamed this input; "args" is silently
+          # ignored (just an unrecognized-input warning).
+          snapcraft-args: pack
+
+      - name: Snapcraft Review
+        uses: diddlesnaps/snapcraft-review-action@v1
+        with:
+          snap: ${{ steps.build.outputs.snap }}
+          isClassic: 'false'
+          # The dot-minecraft personal-files plug needs a store
+          # declaration, which mc-installer has (it auto-connects).
+          # Without this the review flags it for manual review and fails.
+          plugs: ./.github/plug-declaration.json

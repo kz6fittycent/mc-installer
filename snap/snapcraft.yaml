@@ -56,7 +56,10 @@ parts:
     
     override-pull: |
       craftctl default
-      craftctl set version="$(git describe --tags | sed 's/^v//' | cut -d "-" -f1)"
+      # --match 'v*': the snap-rev-<revision> tags the CI workflows push
+      # must not become the version. -C: parts/ isn't inside the repo
+      # when building in LXD (snapcore/action-build).
+      craftctl set version="$(git -C "$CRAFT_PROJECT_DIR" describe --tags --match 'v*' | sed 's/^v//' | cut -d "-" -f1)"
        
   game:
     plugin: nil
