@@ -8,5 +8,6 @@ Icon=${SNAP}/meta/gui/mcinstaller.png
 Terminal=false
 Type=Application
 StartupNotify=false
+PrefersNonDefaultGPU=true
 Categories=Application;Game
 Keywords=mc-installer;

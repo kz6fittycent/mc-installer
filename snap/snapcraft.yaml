@@ -46,8 +46,10 @@ apps:
     environment:
       PYTHONPATH: $SNAP_DESKTOP_RUNTIME/usr/lib/python3.8/site-packages
       JAVA_HOME: $SNAP/usr/lib/jvm/java-25-openjdk-amd64/
-      __NV_PRIME_RENDER_OFFLOAD: 1
-      __GLX_VENDOR_LIBRARY_NAME: nvidia 
+      # Don't force __NV_PRIME_RENDER_OFFLOAD / __GLX_VENDOR_LIBRARY_NAME here:
+      # on a desktop where the NVIDIA card drives the display, PRIME offload
+      # leaves the game window unpainted (you see the desktop through it).
+      # Hybrid laptops get the dGPU via PrefersNonDefaultGPU in the .desktop file.
       __GL_THREADED_OPTIMIZATIONS: 0
 parts:
   launcher:
