@@ -5,6 +5,11 @@
 ## Installation
 `sudo snap install mc-installer`
 
+### Microphone (voice chat mods)
+Microphone access is not connected automatically. To use voice chat mods such as Simple Voice Chat, run:
+
+`sudo snap connect mc-installer:audio-record`
+
 ## About
 A fork of the Minecraft-NSG installer snap. Omits the Oracle version of Java and just runs with openjdk. Skips the dialog and just downloads the .jar and runs the installer.
 
