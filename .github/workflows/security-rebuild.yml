@@ -1,6 +1,6 @@
 name: 🛡️ Security Rebuild
 
-# Once a day, runs the Snap Store's own security check
+# Once a week (Mondays), runs the Snap Store's own security check
 # (review-tools.snap-check-notices - the same check behind the store's
 # "a rebuild would fix this" emails) against the snap published on stable.
 # When Ubuntu has published fixes for packages bundled in it (OpenJDK,
@@ -17,7 +17,7 @@ name: 🛡️ Security Rebuild
 #    usual "/promote <revision> stable done" comment (promote-to-stable.yml).
 #
 # Nothing happens while a security-rebuild issue is still open, so an
-# unreleased rebuild isn't rebuilt again every day.
+# unreleased rebuild isn't rebuilt again every week.
 #
 # Run it by hand from the Actions tab (Run workflow):
 # - dry_run: checks and reports, but builds, uploads, and opens nothing
@@ -25,7 +25,7 @@ name: 🛡️ Security Rebuild
 
 on:
   schedule:
-    - cron: "37 9 * * *"  # daily, 09:37 UTC
+    - cron: "37 9 * * 1"  # weekly (Mondays), 09:37 UTC
   workflow_dispatch:
     inputs:
       dry_run:
