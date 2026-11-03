@@ -1,23 +1,9 @@
 #!/bin/bash
 
-# The .desktop file has PrefersNonDefaultGPU=true so hybrid laptops start
-# Minecraft on the discrete GPU. GNOME then sets NVIDIA's PRIME offload
-# variables, and it does so even when there is only one GPU (it counts that
-# one as "discrete"). On a desktop where NVIDIA drives the display, offload
-# breaks things: the launcher's Skins tab says WebGL isn't supported (its
-# Chromium GPU process crashes) and the game window can come out see-through.
-# So keep them only when there really is more than one GPU.
-gpu_count() {
-	local card
-	for card in /sys/class/drm/card*; do
-		[[ "${card##*/}" =~ ^card[0-9]+$ ]] || continue  # skip connectors (card1-DP-1)
-		readlink -f "$card/device"
-	done | sort -u | wc -l
-}
-if [ "$(gpu_count)" -le 1 ]; then
-	unset __NV_PRIME_RENDER_OFFLOAD __GLX_VENDOR_LIBRARY_NAME __VK_LAYER_NV_optimus \
-		VK_LOADER_DRIVERS_SELECT DRI_PRIME
-fi
+# Drop GNOME's GPU-offload settings where they'd point at the GPU that
+# already drives the display (see gpu-env.sh).
+source "$(dirname "${BASH_SOURCE[0]}")/gpu-env.sh"
+fix_gpu_offload
 
 set -e
 (
