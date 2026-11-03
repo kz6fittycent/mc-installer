@@ -8,7 +8,9 @@ Run it in a normal terminal (not inside the snap):
 
 Each step says which screen to open and which key to press. GNOME saves
 the screenshot to ~/Pictures/Screenshots; this script notices the new file
-and moves it to ../mc-installer.wiki/images/<name>.png, then goes on.
+and moves it to ~/Pictures/mc-installer-wiki-raw/<name>.png, then goes on.
+They stay out of the wiki on purpose: names, avatars and anything private
+get cropped or blurred before an image goes in the wiki's images/.
 
   Alt+Print    the window in front (most steps)
   Shift+Print  the whole screen (menus; it gets cropped afterwards)
@@ -23,9 +25,9 @@ import sys
 import time
 from pathlib import Path
 
-WIKI_IMAGES = Path(__file__).resolve().parent.parent.parent / "mc-installer.wiki" / "images"
 PICTURES = Path(subprocess.run(["xdg-user-dir", "PICTURES"], capture_output=True, text=True).stdout.strip() or Path.home() / "Pictures")
 SCREENSHOTS = PICTURES / "Screenshots"
+RAW = PICTURES / "mc-installer-wiki-raw"
 
 WINDOW, SCREEN = "Alt+Print", "Shift+Print"
 
@@ -39,7 +41,6 @@ STEPS = [
     ("app-menu-set-up-mods", SCREEN, "Right-click the Minecraft icon (in the app grid or the dock) so the menu with  Set Up Mods  shows."),
     # The launcher
     ("launcher-signin", WINDOW, "OPTIONAL (needs signing out): the launcher's sign-in screen. Press Enter to skip."),
-    ("launcher-home", WINDOW, "The launcher's main screen: Minecraft: Java Edition, with the big Play button."),
     ("launcher-version-menu", WINDOW, "Click the version picker next to Play so the list of profiles (Latest release, Fabric…) is open."),
     ("launcher-installations", WINDOW, "The launcher's Installations tab."),
     ("launcher-new-installation", WINDOW, "Installations > New installation, with the version list showing (then cancel it)."),
@@ -51,7 +52,6 @@ STEPS = [
     ("game-connection-lost", WINDOW, "OPTIONAL: join ironhide from the plain 26.2 profile (no mods) to get the Connection Lost / registry error. Enter to skip."),
     # Mods
     ("files-mods-folder", WINDOW, "In Minecraft Mods, press Open mods folder. The Files window that opens."),
-    ("launcher-fabric-selected", WINDOW, "Back in the launcher, with the Fabric profile chosen next to Play."),
     ("game-fabric-title", WINDOW, "Start the Fabric profile. The title screen (Fabric shows in the corner)."),
     ("game-mods-incompatible", WINDOW, "OPTIONAL: Fabric's 'Incompatible mods' screen, e.g. with a mod for the wrong version in the mods folder. Enter to skip."),
     # Microphone
@@ -85,8 +85,8 @@ def wait_for_shot(after):
 def main():
     wanted = set(sys.argv[1:])
     steps = [s for s in STEPS if not wanted or s[0] in wanted]
-    WIKI_IMAGES.mkdir(parents=True, exist_ok=True)
-    print(f"Saving to {WIKI_IMAGES}\nEnter = skip, b + Enter = redo the previous step.\n")
+    RAW.mkdir(parents=True, exist_ok=True)
+    print(f"Saving to {RAW}\nEnter = skip, b + Enter = redo the previous step.\n")
     i = 0
     while i < len(steps):
         name, key, what = steps[i]
@@ -98,7 +98,7 @@ def main():
         if result == "skip":
             print("        skipped\n")
         else:
-            shutil.move(str(result), WIKI_IMAGES / f"{name}.png")
+            shutil.move(str(result), RAW / f"{name}.png")
             print(f"        saved {name}.png\n")
         i += 1
     print("Done.")
