@@ -2,8 +2,20 @@ name: mc-installer
 title: Minecraft Installer
 adopt-info: launcher
 summary: A simple installer for Minecraft - Java Edition
-description: | 
+description: |
   A simple installer for Minecraft - Java Edition.
+
+  It downloads the official Minecraft launcher and keeps it up to date. Sign
+  in with your Microsoft account to play. Minecraft itself isn't included.
+
+  Want mods? Open "Minecraft Mods" (or right-click the Minecraft icon and
+  choose "Set Up Mods") to install Fabric for the Minecraft version you play.
+
+  New to it? The wiki takes you from installing to playing, with mods and
+  servers: https://github.com/kz6fittycent/mc-installer/wiki
+
+  Not an official Minecraft product. Not approved by or associated with
+  Mojang or Microsoft.
 license: MIT
 website: https://minecraft.net
 contact: https://github.com/kz6fittycent/mc-installer/issues
