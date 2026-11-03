@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Minecraft Mods
+GenericName=Minecraft Mod Setup
+Comment=Install Fabric so the Minecraft launcher can load mods
+Exec=mc-installer.mods
+Icon=${SNAP}/meta/gui/mcinstaller.png
+Terminal=false
+Type=Application
+StartupNotify=true
+Categories=Game;
+Keywords=mods;fabric;modrinth;mc-installer;

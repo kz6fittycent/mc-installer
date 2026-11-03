@@ -52,6 +52,19 @@ apps:
       # leaves the game window unpainted (you see the desktop through it).
       # Hybrid laptops get the dGPU via PrefersNonDefaultGPU in the .desktop file.
       __GL_THREADED_OPTIMIZATIONS: 0
+  # Separate window for setting up Fabric (scripts/mods.py). Desktop file:
+  # snap/gui/mods.desktop. It edits the same $SNAP_USER_DATA/.minecraft.
+  mods:
+    extensions:
+      - gnome
+    command: mods.py
+    plugs:
+      - network
+      - home
+      - desktop
+      - desktop-legacy
+      - x11
+      - wayland
 parts:
   launcher:
     plugin: dump

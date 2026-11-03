@@ -11,3 +11,8 @@ StartupNotify=false
 PrefersNonDefaultGPU=true
 Categories=Application;Game
 Keywords=mc-installer;
+Actions=mods;
+
+[Desktop Action mods]
+Name=Set Up Mods
+Exec=mc-installer.mods
