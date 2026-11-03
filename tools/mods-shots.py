@@ -7,8 +7,8 @@ permission is needed:
 
     snap run --shell mc-installer -c 'python3 tools/mods-shots.py'
 
-It downloads Fabric API, Sodium and Iris from Modrinth into the throwaway
-folder so the "Your Fabric profiles" list looks real.
+It installs Fabric API, Sodium, Iris and a resource pack from Modrinth into
+the throwaway folder so the lists look real, and shows the Upgrade dialog.
 """
 
 import json
@@ -76,32 +76,61 @@ def run(app):
     blue = Gtk.CssProvider()
     blue.load_from_string(":root { --accent-bg-color: #3584e4; --accent-color: #1c71d8; }")
     Gtk.StyleContext.add_provider_for_display(win.get_display(), blue, Gtk.STYLE_PROVIDER_PRIORITY_USER + 1)
-    win.set_default_size(560, 660)
+    win.set_default_size(620, 760)
     win.present()
     OUT.mkdir(parents=True, exist_ok=True)
 
+    fabric = win.fabric
+
     def shot_start():
-        win.version_row.set_selected(win.versions.index(MC))
+        fabric.version_row.set_selected(win.versions.index(MC))
         GLib.timeout_add(400, lambda: save(win, "mods-app.png") or shot_install())
 
     def shot_install():
-        win.on_install(None)
-        wait_for(lambda: win.status.get_text().startswith("Done"), shot_done)
+        fabric.on_install(None)
+        wait_for(lambda: fabric.status.get_text().startswith("Done"), shot_done)
 
     def shot_done():
-        mods_dir = mcmods.fabric_profiles()[0].mods_dir
-        for project in ("sodium", "iris"):
-            mcmods.install_modrinth_project(project, MC, mods_dir)
-        win.refresh_installed()
-        GLib.timeout_add(600, lambda: save(win, "mods-app-installed.png") or shot_banner())
+        profile = mcmods.fabric_profiles()[0]
+        mcmods.install_project("iris", "mod", profile)  # brings Sodium
+        win.refresh_all()
+        GLib.timeout_add(1500, lambda: save(win, "mods-app-installed.png") or shot_mods())
+
+    def shot_mods():
+        if fabric.toast:
+            fabric.toast.dismiss()
+        win.stack.set_visible_child_name("mods")
+        win.mods.search.set_text("minimap")
+        wait_for(lambda: win.mods.hits and win.mods.search_gen and len(win.mods.installed.rows) > 1,
+                 lambda: save(win, "mods-app-search.png") or shot_packs())
+
+    def shot_packs():
+        packs = win.packs
+        packs.folder_row.set_selected(len(packs.folders) - 1)  # Minecraft without mods
+        hits = mcmods.search("", "resourcepack", packs.selected_folder())
+        mcmods.install_project(hits[0].id, "resourcepack", packs.selected_folder())
+        packs.refresh_installed()
+        win.stack.set_visible_child_name("packs")
+        wait_for(lambda: packs.hits and packs.have, lambda: save(win, "mods-app-resourcepacks.png") or shot_upgrade())
+
+    def shot_upgrade():
+        # The confirmation for moving the 26.2 profile to the newest Minecraft.
+        win.stack.set_visible_child_name("fabric")
+        profile = mcmods.fabric_profile_for(MC)
+        fabric.planned(mcmods.plan_upgrade(profile, win.versions[0]), None)
+
+        def shot():
+            save(win, "mods-app-upgrade.png")
+            win.get_visible_dialog().force_close()
+            shot_banner()
+        GLib.timeout_add(800, shot)
 
     def shot_banner():
         global launcher_open
         launcher_open = True
-        if win.toast:
-            win.toast.dismiss()
+        win.stack.set_visible_child_name("fabric")
         win.check_launcher()
-        win.status.set_text("")
+        fabric.status.set_text("")
         GLib.timeout_add(800, lambda: save(win, "mods-app-launcher-open.png") or finish())
 
     def finish():

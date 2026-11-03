@@ -9,7 +9,9 @@ description: |
   in with your Microsoft account to play. Minecraft itself isn't included.
 
   Want mods? Open "Minecraft Mods" (or right-click the Minecraft icon and
-  choose "Set Up Mods") to install Fabric for the Minecraft version you play.
+  choose "Set Up Mods") to install Fabric for the Minecraft version you play,
+  then search Modrinth for mods and resource packs and install them with one
+  click. Modrinth modpacks (.mrpack) can be imported too.
 
   New to it? The wiki takes you from installing to playing, with mods and
   servers: https://github.com/kz6fittycent/mc-installer/wiki
@@ -64,7 +66,8 @@ apps:
       # leaves the game window unpainted (you see the desktop through it).
       # Hybrid laptops get the dGPU via PrefersNonDefaultGPU in the .desktop file.
       __GL_THREADED_OPTIMIZATIONS: 0
-  # Separate window for setting up Fabric (scripts/mods.py). Desktop file:
+  # Separate window for Fabric, mods, resource packs and modpacks
+  # (scripts/mods.py). Desktop file:
   # snap/gui/mods.desktop. It edits the same $SNAP_USER_DATA/.minecraft.
   mods:
     extensions:
