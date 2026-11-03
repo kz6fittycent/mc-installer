@@ -11,9 +11,11 @@ Microphone access is not connected automatically. To use voice chat mods such as
 `sudo snap connect mc-installer:audio-record`
 
 ### Mods (Fabric)
-Mods need a mod loader; putting `.jar` files in the mods folder isn't enough on its own. The snap includes a **Minecraft Mods** app (also in the right-click menu of the Minecraft icon, as *Set Up Mods*), or run:
+Mods need a mod loader; putting `.jar` files in the mods folder isn't enough on its own. From 15.0 the snap includes a **Minecraft Mods** app (also in the right-click menu of the Minecraft icon, as *Set Up Mods*), or run:
 
 `mc-installer.mods`
+
+![The Minecraft Mods app](docs/screenshots/mods-app-installed.png)
 
 1. Close the Minecraft launcher.
 2. Pick the Minecraft version your mods (or your server) use, and press **Install Fabric**. Fabric API, which most mods need, is installed too.
@@ -21,6 +23,8 @@ Mods need a mod loader; putting `.jar` files in the mods folder isn't enough on 
 4. In the launcher, pick the **Fabric** profile and press Play.
 
 Each Fabric profile has its own game folder (`~/snap/mc-installer/current/.minecraft/profiles/fabric-<version>/`), with its own mods, settings and worlds, so mods for one Minecraft version never load on another.
+
+Playing on a server with mods? Install Fabric for the server's Minecraft version, then add the mods the server owner says players need. More help is on the [wiki](https://github.com/kz6fittycent/mc-installer/wiki/Mods).
 
 ## About
 A fork of the Minecraft-NSG installer snap. Omits the Oracle version of Java and just runs with openjdk. Skips the dialog and just downloads the .jar and runs the installer.

@@ -10,18 +10,50 @@ from threading import Thread
 import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gio, GLib, Gtk
+from gi.repository import Adw, Gdk, Gio, GLib, Gtk
 
 import mcmods
 
 APP_ID = "io.snapcraft.mc-installer.mods"
+_accent_fixed = False
+
+
+def fix_accent_colors():
+    """Set libadwaita's accent CSS variables from the desktop's accent color.
+
+    Inside the snap they come out empty, so suggested buttons have no fill
+    and switches look off even when on. Setting them ourselves fixes that
+    and still follows the desktop's accent and dark/light style. It needs
+    USER priority: libadwaita's own accent rules beat APPLICATION.
+    """
+    global _accent_fixed
+    if _accent_fixed:
+        return
+    _accent_fixed = True
+    style = Adw.StyleManager.get_default()
+    provider = Gtk.CssProvider()
+
+    def update(*_args):
+        bg = style.get_accent_color_rgba().to_string()
+        fg = style.get_accent_color().to_standalone_rgba(style.get_dark()).to_string()
+        provider.load_from_string(
+            f":root {{ --accent-bg-color: {bg}; --accent-color: {fg}; --accent-fg-color: white; }}")
+
+    update()
+    style.connect("notify::accent-color-rgba", update)
+    style.connect("notify::dark", update)
+    Gtk.StyleContext.add_provider_for_display(
+        Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_USER)
 
 
 class ModsWindow(Adw.ApplicationWindow):
 
     def __init__(self, app):
         super().__init__(application=app, title="Minecraft Mods", default_width=520, default_height=600)
+        fix_accent_colors()
         self.versions = []
+        self.toast = None
+        self.busy = False
 
         self.toasts = Adw.ToastOverlay()
         view = Adw.ToolbarView()
@@ -91,7 +123,9 @@ class ModsWindow(Adw.ApplicationWindow):
         GLib.idle_add(self.status.set_text, text)
 
     def check_launcher(self):
-        self.banner.set_revealed(mcmods.launcher_running())
+        running = mcmods.launcher_running()
+        self.banner.set_revealed(running)
+        self.install_button.set_sensitive(bool(self.versions) and not running and not self.busy)
         return GLib.SOURCE_CONTINUE
 
     # --- versions -----------------------------------------------------
@@ -104,26 +138,29 @@ class ModsWindow(Adw.ApplicationWindow):
         self.versions = versions
         self.version_row.set_model(Gtk.StringList.new(versions))
         self.version_row.set_sensitive(True)
-        self.install_button.set_sensitive(True)
+        self.check_launcher()
 
     # --- install ------------------------------------------------------
 
     def on_install(self, _button):
         mc = self.versions[self.version_row.get_selected()]
+        self.busy = True
         self.install_button.set_sensitive(False)
         self.version_row.set_sensitive(False)
         self.status.set_text(f"Installing Fabric for Minecraft {mc}…")
         self.run_in_thread(mcmods.install_fabric, self.installed_done, mc, self.api_row.get_active(), self.say)
 
     def installed_done(self, result, error):
-        self.install_button.set_sensitive(True)
+        self.busy = False
         self.version_row.set_sensitive(True)
+        self.check_launcher()
         if error:
             self.status.set_text(error)
             return
         name, _mods_dir = result
         self.status.set_text(f"Done. In the Minecraft launcher, pick “{name}” and press Play.")
-        self.toasts.add_toast(Adw.Toast(title=f"{name} is ready"))
+        self.toast = Adw.Toast(title=f"{name} is ready")
+        self.toasts.add_toast(self.toast)
         self.refresh_installed()
 
     # --- installed profiles -------------------------------------------
@@ -139,8 +176,9 @@ class ModsWindow(Adw.ApplicationWindow):
             self.installed_rows.append(row)
         for mc, mods_dir in profiles:
             jars = sorted(p.name for p in mods_dir.glob("*.jar")) if mods_dir.is_dir() else []
+            names = ", ".join(j[:-4] for j in jars)
             row = Adw.ActionRow(title=f"Fabric {mc}",
-                                subtitle=f"{len(jars)} mod{'s' if len(jars) != 1 else ''}: " + ", ".join(jars) if jars else "No mods yet")
+                                subtitle=f"{len(jars)} mod{'s' if len(jars) != 1 else ''}: {names}" if jars else "No mods yet")
             button = Gtk.Button(label="Open mods folder", valign=Gtk.Align.CENTER)
             button.connect("clicked", self.open_folder, mods_dir)
             row.add_suffix(button)
