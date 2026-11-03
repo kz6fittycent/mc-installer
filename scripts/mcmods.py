@@ -118,26 +118,60 @@ def launcher_running():
     return False
 
 
+FABRIC_VERSION_RE = re.compile(r"^fabric-loader-([0-9A-Za-z.+_-]+?)-([0-9][0-9A-Za-z.+_-]*)$")
+
+
+class FabricProfile:
+    """A launcher profile that runs Fabric, whoever made it.
+
+    Fabric's own installer names its versions fabric-loader-<loader>-<mc>,
+    the same as this app, so that is how they're recognized.
+    """
+
+    def __init__(self, key, entry):
+        match = FABRIC_VERSION_RE.match(entry.get("lastVersionId", ""))
+        self.key = key
+        self.name = entry.get("name") or f"Fabric {match.group(2)}"
+        self.loader, self.mc = match.group(1), match.group(2)
+        game_dir = entry.get("gameDir")
+        if not game_dir:  # no game folder of its own: the shared .minecraft
+            self.game_dir = stable_dot_minecraft()
+        elif os.path.isabs(game_dir):
+            self.game_dir = Path(game_dir)
+        else:
+            self.game_dir = stable_dot_minecraft() / game_dir
+        self.mods_dir = self.game_dir / "mods"
+        self.ours = key.startswith(PROFILE_KEY.format(mc=""))
+
+
 def fabric_profiles():
-    """Fabric profiles this app made: list of (minecraft version, mods folder)."""
+    """Every Fabric profile in the launcher, newest Minecraft first."""
     try:
         with open(dot_minecraft() / "launcher_profiles.json") as f:
             profiles = json.load(f).get("profiles", {})
     except (OSError, ValueError):
         return []
-    found = []
-    prefix = PROFILE_KEY.format(mc="")
-    for key, p in profiles.items():
-        if key.startswith(prefix) and p.get("gameDir"):
-            found.append((key[len(prefix):], Path(p["gameDir"]) / "mods"))
-    return sorted(found, reverse=True)
+    found = [FabricProfile(k, p) for k, p in profiles.items()
+             if isinstance(p, dict) and FABRIC_VERSION_RE.match(p.get("lastVersionId", ""))]
+
+    def version_key(fp):
+        return [int(x) if x.isdigit() else -1 for x in re.split(r"[.-]", fp.mc)]
+    return sorted(found, key=lambda fp: (version_key(fp), fp.ours), reverse=True)
+
+
+def fabric_profile_for(mc):
+    """The profile to update for Minecraft `mc`: this app's, else any other."""
+    matches = [fp for fp in fabric_profiles() if fp.mc == mc]
+    return next((fp for fp in matches if fp.ours), matches[0] if matches else None)
 
 
 def install_fabric(mc, with_fabric_api=True, progress=lambda text: None):
     """Install the newest stable Fabric for Minecraft `mc`.
 
-    Returns (profile name, mods folder). Safe to run again: it updates the
-    loader and keeps the profile's mods and settings.
+    If a Fabric profile for `mc` already exists (made by this app or by
+    Fabric's own installer), that profile is updated instead: same name,
+    same game folder, same mods. Otherwise a new profile gets its own game
+    folder. Returns (profile name, mods folder, updated: bool).
     """
     mc = _check_version(mc)
     dot = dot_minecraft()
@@ -159,28 +193,34 @@ def install_fabric(mc, with_fabric_api=True, progress=lambda text: None):
     vdir.mkdir(parents=True, exist_ok=True)
     _write_json(vdir / f"{vid}.json", profile_json)
 
-    game_dir = stable_dot_minecraft() / "profiles" / f"fabric-{mc}"
-    mods_dir = game_dir / "mods"
-    mods_dir.mkdir(parents=True, exist_ok=True)
-
     with open(profiles_path) as f:
         launcher_profiles = json.load(f)
     shutil.copy2(profiles_path, profiles_path.with_name("launcher_profiles.json.bak-mods"))
     profiles = launcher_profiles.setdefault("profiles", {})
-    key = PROFILE_KEY.format(mc=mc)
-    names = {p.get("name") for k, p in profiles.items() if k != key}
-    name = f"Fabric {mc}" if f"Fabric {mc}" not in names else f"Fabric {mc} (Mods app)"
     now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
-    entry = profiles.get(key, {"created": now, "icon": "Furnace"})
-    entry.update(name=name, type="custom", lastVersionId=vid, gameDir=str(game_dir), lastUsed=now)
-    profiles[key] = entry
+
+    existing = fabric_profile_for(mc)
+    if existing:
+        # Only the loader changes; name, game folder and mods stay as they are.
+        profiles[existing.key]["lastVersionId"] = vid
+        name, mods_dir = existing.name, existing.mods_dir
+    else:
+        game_dir = stable_dot_minecraft() / "profiles" / f"fabric-{mc}"
+        mods_dir = game_dir / "mods"
+        names = {p.get("name") for p in profiles.values() if isinstance(p, dict)}
+        name = f"Fabric {mc}" if f"Fabric {mc}" not in names else f"Fabric {mc} (Mods app)"
+        profiles[PROFILE_KEY.format(mc=mc)] = {
+            "created": now, "icon": "Furnace", "name": name, "type": "custom",
+            "lastVersionId": vid, "gameDir": str(game_dir), "lastUsed": now,
+        }
+    mods_dir.mkdir(parents=True, exist_ok=True)
     _write_json(profiles_path, launcher_profiles)
 
     if with_fabric_api:
         progress("Installing Fabric API…")
         install_modrinth_project("fabric-api", mc, mods_dir)
 
-    return name, mods_dir
+    return name, mods_dir, bool(existing)
 
 
 # --- Modrinth -------------------------------------------------------------

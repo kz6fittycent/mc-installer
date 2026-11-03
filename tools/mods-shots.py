@@ -89,7 +89,7 @@ def run(app):
         wait_for(lambda: win.status.get_text().startswith("Done"), shot_done)
 
     def shot_done():
-        mods_dir = mcmods.fabric_profiles()[0][1]
+        mods_dir = mcmods.fabric_profiles()[0].mods_dir
         for project in ("sodium", "iris"):
             mcmods.install_modrinth_project(project, MC, mods_dir)
         win.refresh_installed()

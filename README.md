@@ -22,7 +22,7 @@ Mods need a mod loader; putting `.jar` files in the mods folder isn't enough on 
 3. Press **Open mods folder** and put mods for that version there. Only download mods from sites you trust, such as [Modrinth](https://modrinth.com).
 4. In the launcher, pick the **Fabric** profile and press Play.
 
-Each Fabric profile has its own game folder (`~/snap/mc-installer/current/.minecraft/profiles/fabric-<version>/`), with its own mods, settings and worlds, so mods for one Minecraft version never load on another.
+A new Fabric profile gets its own game folder (`~/snap/mc-installer/current/.minecraft/profiles/fabric-<version>/`), with its own mods, settings and worlds, so mods for one Minecraft version never load on another. Already have Fabric for that version (from Fabric's own installer, say)? The app finds it, shows its mods, and updates it in place instead of making a second one.
 
 Playing on a server with mods? Install Fabric for the server's Minecraft version, then add the mods the server owner says players need. More help is on the [wiki](https://github.com/kz6fittycent/mc-installer/wiki/Mods).
 

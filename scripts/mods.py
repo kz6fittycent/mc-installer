@@ -52,6 +52,7 @@ class ModsWindow(Adw.ApplicationWindow):
         super().__init__(application=app, title="Minecraft Mods", default_width=520, default_height=600)
         fix_accent_colors()
         self.versions = []
+        self.profiles = []
         self.toast = None
         self.busy = False
 
@@ -70,12 +71,14 @@ class ModsWindow(Adw.ApplicationWindow):
         install = Adw.PreferencesGroup(
             title="Install Fabric",
             description="Fabric loads mods. Install it for the Minecraft version your "
-                        "mods (or your server) use. It adds a “Fabric” profile to the launcher.",
+                        "mods (or your server) use. It adds a “Fabric” profile to the launcher, "
+                        "or updates the one you already have.",
         )
         page.add(install)
 
         self.version_row = Adw.ComboRow(title="Minecraft version", sensitive=False)
         self.version_row.set_model(Gtk.StringList.new(["Loading…"]))
+        self.version_row.connect("notify::selected", self.update_button_label)
         install.add(self.version_row)
 
         self.api_row = Adw.SwitchRow(title="Also install Fabric API", subtitle="Most mods need it", active=True)
@@ -94,8 +97,8 @@ class ModsWindow(Adw.ApplicationWindow):
         # Installed Fabric profiles
         self.installed = Adw.PreferencesGroup(
             title="Your Fabric profiles",
-            description="Each one has its own mods folder. Put mod .jar files for that "
-                        "Minecraft version there, then pick the profile in the launcher.",
+            description="Put mod .jar files made for that Minecraft version in its mods "
+                        "folder, then pick the profile in the launcher.",
         )
         page.add(self.installed)
         self.installed_rows = []
@@ -137,13 +140,27 @@ class ModsWindow(Adw.ApplicationWindow):
             return
         self.versions = versions
         self.version_row.set_model(Gtk.StringList.new(versions))
+        # Start on the version of an existing Fabric profile, if there is one.
+        have = next((fp.mc for fp in self.profiles if fp.mc in versions), None)
+        if have:
+            self.version_row.set_selected(versions.index(have))
         self.version_row.set_sensitive(True)
+        self.update_button_label()
         self.check_launcher()
+
+    def selected_version(self):
+        i = self.version_row.get_selected()
+        return self.versions[i] if self.versions and 0 <= i < len(self.versions) else None
+
+    def update_button_label(self, *_args):
+        mc = self.selected_version()
+        existing = mc and any(fp.mc == mc for fp in self.profiles)
+        self.install_button.set_label("Update Fabric" if existing else "Install Fabric")
 
     # --- install ------------------------------------------------------
 
     def on_install(self, _button):
-        mc = self.versions[self.version_row.get_selected()]
+        mc = self.selected_version()
         self.busy = True
         self.install_button.set_sensitive(False)
         self.version_row.set_sensitive(False)
@@ -157,11 +174,17 @@ class ModsWindow(Adw.ApplicationWindow):
         if error:
             self.status.set_text(error)
             return
-        name, _mods_dir = result
-        self.status.set_text(f"Done. In the Minecraft launcher, pick “{name}” and press Play.")
-        self.toast = Adw.Toast(title=f"{name} is ready")
+        name, _mods_dir, updated = result
+        if updated:
+            self.status.set_text(f"Updated “{name}”. Your mods and worlds are still there.\n"
+                                 "In the Minecraft launcher, pick it and press Play.")
+            self.toast = Adw.Toast(title=f"{name} is up to date")
+        else:
+            self.status.set_text(f"Done. In the Minecraft launcher, pick “{name}” and press Play.")
+            self.toast = Adw.Toast(title=f"{name} is ready")
         self.toasts.add_toast(self.toast)
         self.refresh_installed()
+        self.update_button_label()
 
     # --- installed profiles -------------------------------------------
 
@@ -169,18 +192,20 @@ class ModsWindow(Adw.ApplicationWindow):
         for row in self.installed_rows:
             self.installed.remove(row)
         self.installed_rows = []
-        profiles = mcmods.fabric_profiles()
+        self.profiles = profiles = mcmods.fabric_profiles()
         if not profiles:
             row = Adw.ActionRow(title="None yet")
             self.installed.add(row)
             self.installed_rows.append(row)
-        for mc, mods_dir in profiles:
-            jars = sorted(p.name for p in mods_dir.glob("*.jar")) if mods_dir.is_dir() else []
-            names = ", ".join(j[:-4] for j in jars)
-            row = Adw.ActionRow(title=f"Fabric {mc}",
-                                subtitle=f"{len(jars)} mod{'s' if len(jars) != 1 else ''}: {names}" if jars else "No mods yet")
+        for fp in profiles:
+            jars = sorted(p.name for p in fp.mods_dir.glob("*.jar")) if fp.mods_dir.is_dir() else []
+            mods = (f"{len(jars)} mod{'s' if len(jars) != 1 else ''}: " + ", ".join(j[:-4] for j in jars)
+                    if jars else "no mods yet")
+            row = Adw.ActionRow(title=GLib.markup_escape_text(fp.name),
+                                subtitle=GLib.markup_escape_text(
+                                    f"Minecraft {fp.mc} · Fabric {fp.loader} · {mods}"))
             button = Gtk.Button(label="Open mods folder", valign=Gtk.Align.CENTER)
-            button.connect("clicked", self.open_folder, mods_dir)
+            button.connect("clicked", self.open_folder, fp.mods_dir)
             row.add_suffix(button)
             self.installed.add(row)
             self.installed_rows.append(row)
