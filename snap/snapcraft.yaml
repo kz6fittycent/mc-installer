@@ -8,7 +8,7 @@ description: |
   It downloads the official Minecraft launcher and keeps it up to date. Sign
   in with your Microsoft account to play. Minecraft itself isn't included.
 
-  Want mods? Open "Minecraft Mods" (or right-click the Minecraft icon and
+  Want mods? Open "MC Mods" (or right-click the Minecraft icon and
   choose "Set Up Mods") to install Fabric for the Minecraft version you play,
   then search Modrinth for mods and resource packs and install them with one
   click. Modrinth modpacks (.mrpack) can be imported too.
@@ -59,7 +59,6 @@ apps:
       - x11
       - wayland
     environment:
-      PYTHONPATH: $SNAP_DESKTOP_RUNTIME/usr/lib/python3.8/site-packages
       JAVA_HOME: $SNAP/usr/lib/jvm/java-25-openjdk-amd64/
       # Don't force __NV_PRIME_RENDER_OFFLOAD / __GLX_VENDOR_LIBRARY_NAME here:
       # on a desktop where the NVIDIA card drives the display, PRIME offload
@@ -109,6 +108,15 @@ parts:
       - x11-xserver-utils
       - libflite1
       - python3-gi
+    override-prime: |
+      craftctl default
+      # The narrator (com.mojang.text2speech) asks for libflite.so and
+      # libflite_cmu_us_kal16.so by those plain names, but libflite1 only
+      # has the numbered ones (.so.1). The -dev package would add the plain
+      # names plus static libraries and headers we don't need.
+      cd "$CRAFT_PRIME/usr/lib/x86_64-linux-gnu"
+      ln -sf libflite.so.1 libflite.so
+      ln -sf libflite_cmu_us_kal16.so.1 libflite_cmu_us_kal16.so
      
   cleanup:
     after: 

@@ -11,11 +11,11 @@ Microphone access is not connected automatically. To use voice chat mods such as
 `sudo snap connect mc-installer:audio-record`
 
 ### Mods, resource packs and modpacks
-Mods need a mod loader; putting `.jar` files in the mods folder isn't enough on its own. The snap includes a **Minecraft Mods** app (also in the right-click menu of the Minecraft icon, as *Set Up Mods*), or run:
+Mods need a mod loader; putting `.jar` files in the mods folder isn't enough on its own. The snap includes an app called **MC Mods** (also in the right-click menu of the Minecraft icon, as *Set Up Mods*), or run:
 
 `mc-installer.mods`
 
-![The Minecraft Mods app](docs/screenshots/mods-app-installed.png)
+![The MC Mods app](docs/screenshots/mods-app-installed.png)
 
 **Fabric tab**
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Make the Minecraft Mods screenshots in docs/screenshots/.
+"""Make the MC Mods app screenshots in docs/screenshots/.
 
 Runs inside the installed snap, against a throwaway .minecraft (your real one
 isn't touched), and renders the window with GTK itself, so no screenshot

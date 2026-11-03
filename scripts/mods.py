@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Minecraft Mods: set up Fabric, find mods and resource packs on Modrinth,
+"""MC Mods (Minecraft mods): set up Fabric, find mods and resource packs on Modrinth,
 and import modpacks.
 
 The logic lives in mcmods.py; this file is only the GTK window.
@@ -583,7 +583,7 @@ class BrowsePage(Adw.PreferencesPage):
 class ModsWindow(Adw.ApplicationWindow):
 
     def __init__(self, app):
-        super().__init__(application=app, title="Minecraft Mods", default_width=600, default_height=720)
+        super().__init__(application=app, title="MC Mods", default_width=600, default_height=720)
         fix_accent_colors()
         self.toasts = Adw.ToastOverlay()
         view = Adw.ToolbarView()

@@ -1,5 +1,4 @@
 [Desktop Entry]
-Encoding=UTF-8
 Name=Minecraft
 GenericName=Minecraft Installer
 Comment=A simple installer for Minecraft - Java Edition
@@ -9,7 +8,7 @@ Terminal=false
 Type=Application
 StartupNotify=false
 PrefersNonDefaultGPU=true
-Categories=Application;Game
+Categories=Game;
 Keywords=mc-installer;
 Actions=mods;
 

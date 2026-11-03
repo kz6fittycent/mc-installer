@@ -37,7 +37,7 @@ STEPS = [
     ("appcenter-search", WINDOW, "Open App Center, search for  mc-installer  and leave the results showing."),
     ("appcenter-page", WINDOW, "Open the Minecraft Installer page in App Center (with its Install/Open button showing)."),
     # Starting
-    ("app-grid", SCREEN, "Open the app grid (Super key, then Show Apps) and search  minecraft  so both Minecraft and Minecraft Mods show."),
+    ("app-grid", SCREEN, "Open the app grid (Super key, then Show Apps) and search  minecraft  so both Minecraft and MC Mods show."),
     ("app-menu-set-up-mods", SCREEN, "Right-click the Minecraft icon (in the app grid or the dock) so the menu with  Set Up Mods  shows."),
     # The launcher
     ("launcher-signin", WINDOW, "OPTIONAL (needs signing out): the launcher's sign-in screen. Press Enter to skip."),
@@ -51,7 +51,7 @@ STEPS = [
     ("game-add-server", WINDOW, "Multiplayer > Add Server, with a name and address typed in (e.g. ironhide's)."),
     ("game-connection-lost", WINDOW, "OPTIONAL: join ironhide from the plain 26.2 profile (no mods) to get the Connection Lost / registry error. Enter to skip."),
     # Mods
-    ("files-mods-folder", WINDOW, "In Minecraft Mods, press Open mods folder. The Files window that opens."),
+    ("files-mods-folder", WINDOW, "In MC Mods, press Open mods folder. The Files window that opens."),
     ("game-fabric-title", WINDOW, "Start the Fabric profile. The title screen (Fabric shows in the corner)."),
     ("game-mods-incompatible", WINDOW, "OPTIONAL: Fabric's 'Incompatible mods' screen, e.g. with a mod for the wrong version in the mods folder. Enter to skip."),
     # Microphone

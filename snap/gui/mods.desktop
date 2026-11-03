@@ -1,5 +1,5 @@
 [Desktop Entry]
-Name=Minecraft Mods
+Name=MC Mods
 GenericName=Minecraft Mod Manager
 Comment=Install Fabric, mods, resource packs and modpacks for Minecraft
 Exec=mc-installer.mods
@@ -8,4 +8,4 @@ Terminal=false
 Type=Application
 StartupNotify=true
 Categories=Game;
-Keywords=mods;fabric;modrinth;resourcepacks;resource packs;modpacks;mrpack;mc-installer;
+Keywords=minecraft;mods;fabric;modrinth;resourcepacks;resource packs;modpacks;mrpack;mc-installer;
