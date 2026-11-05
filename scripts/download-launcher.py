@@ -8,14 +8,39 @@ import math
 
 from threading import Thread
 import hashlib
+import os
 import os.path
-import subprocess
+import shutil
+import tarfile
 
 # QUICK FIX - OLDER LAUNCHER
 #DOWNLOAD_LINK = "https://archive.org/download/minecraft-launcher_202103/Minecraft.tar.gz"
 DOWNLOAD_LINK = "https://launcher.mojang.com/download/Minecraft.tar.gz"
 DOWNLOAD_FILE = "Minecraft.tar.gz"
 RESULT_PATH = "minecraft-launcher"
+LAUNCHER_BINARY = os.path.join(RESULT_PATH, "minecraft-launcher")
+EXTRACT_PATH = "minecraft-launcher.new"
+
+
+def install_launcher():
+    """ Unpack the download and swap it in only once it has fully worked, so
+        a failure leaves any launcher that's already installed untouched.
+
+        This uses tarfile because the tar command can't write files inside
+        the snap on some systems ("Cannot open: Operation not permitted").
+    """
+    shutil.rmtree(EXTRACT_PATH, ignore_errors=True)
+    try:
+        with tarfile.open(DOWNLOAD_FILE) as tar:
+            tar.extractall(EXTRACT_PATH, filter="data")
+        if not os.path.isfile(os.path.join(EXTRACT_PATH, LAUNCHER_BINARY)):
+            raise tarfile.ReadError("the download has no launcher in it")
+        shutil.rmtree(RESULT_PATH, ignore_errors=True)
+        os.replace(os.path.join(EXTRACT_PATH, RESULT_PATH), RESULT_PATH)
+    finally:
+        shutil.rmtree(EXTRACT_PATH, ignore_errors=True)
+        if os.path.exists(DOWNLOAD_FILE):
+            os.remove(DOWNLOAD_FILE)
 
 
 def convert_size(size_bytes):
@@ -68,8 +93,8 @@ class SnapUIWindow(Gtk.Window):
         thread.daemon = True
         thread.start()
 
-    def download_error(self, e):
-        self.infolabel.set_text("Download failed!\nPlease check your internet connection and retry.")
+    def download_error(self, message, e):
+        self.infolabel.set_text(message)
         self.progressbar.set_text(str(e))
         self.progressbar.hide()
         self.retry_button.show()
@@ -96,11 +121,14 @@ class SnapUIWindow(Gtk.Window):
 
         except requests.exceptions.RequestException as e:
             # Ask the main thread to execute this code.
-            GLib.idle_add(self.download_error, e)
+            GLib.idle_add(self.download_error, "Download failed!\nPlease check your internet connection and retry.", e)
             return
 
-        subprocess.call(['tar','-xzf', DOWNLOAD_FILE])
-        subprocess.call(['rm','-f', DOWNLOAD_FILE])
+        try:
+            install_launcher()
+        except (OSError, EOFError, tarfile.TarError) as e:
+            GLib.idle_add(self.download_error, "Couldn't install the launcher!\nPlease retry the download.", e)
+            return
 
         with open('Minecraft-Launcher-Last-Modified', 'w+') as f:
             f.write(r.headers.get("Last-Modified", DOWNLOAD_LINK))
@@ -121,8 +149,8 @@ def requires_update():
          * If no launcher is present
          * If a launcher is present but a newer version is available online.
     """
-    if not os.path.isdir(RESULT_PATH):
-        # Launcher isn't present
+    if not os.path.isfile(LAUNCHER_BINARY):
+        # Launcher isn't present (a failed unpack can leave an empty folder)
         return True
 
     try:
@@ -153,7 +181,7 @@ if requires_update():
 # This script returns exit code
 #   0 (success) if launcher is present or
 #   1 (fail)    if not.
-if os.path.isdir(RESULT_PATH):
+if os.path.isfile(LAUNCHER_BINARY):
     exit(0)
 else:
     exit(1)
