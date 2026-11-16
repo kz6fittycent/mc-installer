@@ -8,8 +8,11 @@ name: 🛡️ Security Rebuild
 #
 # 1. rebuilds the snap from the exact commit that stable revision was built
 #    from - never from master, which may hold unreleased work. That commit
-#    is the "snap-rev-<revision>" tag call-for-testing.yml (and this
-#    workflow) push for every revision uploaded. The version comes from the
+#    is the "snap-rev-<revision>" tag call-for-testing.yml pushes for every
+#    revision it uploads, or, for revisions this workflow uploads, a
+#    "snap-rev-<revision>" line in the git notes refs/notes/snap-revisions.
+#    (The Actions token can't tag an older commit whose workflow files
+#    differ from master's, but it can push notes.) The version comes from the
 #    last v* tag, so the rebuild has the same version as stable;
 # 2. checks the new build, and uploads it to the candidate channel;
 # 3. opens a call-for-testing issue (labels: call-for-testing,
@@ -139,8 +142,13 @@ jobs:
           # Refuses rather than guessing (e.g. from the v* tag, which
           # master has usually moved past): rebuilding the wrong commit
           # would ship different code under the stable version number.
-          if ! commit="$(git rev-parse --verify --quiet "refs/tags/snap-rev-${REVISION}^{commit}")"; then
-            echo "::error::No snap-rev-${REVISION} tag - don't know which commit stable revision ${REVISION} was built from. Tag it by hand: git tag snap-rev-${REVISION} <commit> && git push origin snap-rev-${REVISION}"
+          git fetch --quiet origin "+refs/notes/snap-revisions:refs/notes/snap-revisions" 2>/dev/null || true
+          commit="$(git rev-parse --verify --quiet "refs/tags/snap-rev-${REVISION}^{commit}")" || \
+            commit="$(git notes --ref snap-revisions list 2>/dev/null | while read -r _ c; do
+                        git notes --ref snap-revisions show "$c" | grep -qx "snap-rev-${REVISION}" && { echo "$c"; break; }
+                      done || true)"
+          if [[ -z "$commit" ]]; then
+            echo "::error::No snap-rev-${REVISION} tag or note - don't know which commit stable revision ${REVISION} was built from. Tag it by hand: git tag snap-rev-${REVISION} <commit> && git push origin snap-rev-${REVISION}"
             exit 1
           fi
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
@@ -239,9 +247,26 @@ jobs:
 
       # So the next check can find this revision's commit once it's stable.
       - name: Record the commit this revision was built from
+        env:
+          REVISION: ${{ steps.upload.outputs.revision }}
+          COMMIT: ${{ needs.check.outputs.commit }}
         run: |
-          git tag "snap-rev-${{ steps.upload.outputs.revision }}" "${{ needs.check.outputs.commit }}"
-          git push origin "snap-rev-${{ steps.upload.outputs.revision }}"
+          # A note, not a tag: the Actions token can't tag a commit whose
+          # workflow files differ from master's, which a release commit's
+          # usually do. Retried, since every architecture records at once.
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          for attempt in 1 2 3 4 5; do
+            git fetch --quiet origin "+refs/notes/snap-revisions:refs/notes/snap-revisions" 2>/dev/null || true
+            if ! git notes --ref snap-revisions show "$COMMIT" 2>/dev/null | grep -qx "snap-rev-${REVISION}"; then
+              git notes --ref snap-revisions append -m "snap-rev-${REVISION}" "$COMMIT"
+            fi
+            git push --quiet origin refs/notes/snap-revisions && exit 0
+            [[ "$attempt" == 5 ]] && break
+            sleep $((attempt * 5))
+          done
+          echo "::error::Couldn't record snap-rev-${REVISION}. By hand: git tag snap-rev-${REVISION} ${COMMIT} && git push origin snap-rev-${REVISION}"
+          exit 1
 
   open-issue:
     needs: [check, rebuild]
