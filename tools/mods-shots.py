@@ -8,7 +8,8 @@ permission is needed:
     snap run --shell mc-installer -c 'python3 tools/mods-shots.py'
 
 It installs Fabric API, Sodium, Iris and a resource pack from Modrinth into
-the throwaway folder so the lists look real, and shows the Upgrade dialog.
+the throwaway folder so the lists look real, and shows the Upgrade dialog
+and the "Couldn't join" dialog (an older Waystones and a made-up failed join).
 """
 
 import json
@@ -131,7 +132,41 @@ def run(app):
         win.stack.set_visible_child_name("fabric")
         win.check_launcher()
         fabric.status.set_text("")
-        GLib.timeout_add(800, lambda: save(win, "mods-app-launcher-open.png") or finish())
+        GLib.timeout_add(800, lambda: save(win, "mods-app-launcher-open.png") or shot_join())
+
+    def shot_join():
+        # A failed join: the profile has an older Waystones than the server,
+        # and its latest.log says so (made-up LAN address).
+        global launcher_open
+        launcher_open = False
+        win.check_launcher()
+        profile = mcmods.fabric_profile_for(MC)
+        builds = [b for b in mcmods._get_json(f"{mcmods.MODRINTH_API}/project/waystones/version",
+                                              game_versions=json.dumps([MC]), loaders=json.dumps(["fabric"]))
+                  if b.get("version_type") == "release"]
+        builds.sort(key=lambda b: b["date_published"], reverse=True)
+        mcmods.install_project("balm", "mod", profile)
+        old = mcmods._primary(builds[1])
+        os.replace(mcmods._download(old, profile.mods_dir, ".jar"), profile.mods_dir / old["filename"])
+        logs = profile.game_dir / "logs"
+        logs.mkdir(parents=True, exist_ok=True)
+        (logs / "latest.log").write_text(
+            f"[19:02:11] [main/INFO]: Loading Minecraft {MC} with Fabric Loader {profile.loader}\n"
+            "[19:03:40] [Render thread/INFO]: Connecting to 192.168.1.23, 25565\n"
+            "[19:03:41] [Render thread/ERROR]: Received unknown remote registry entries from server\n"
+            "[19:03:41] [Render thread/ERROR]: Registry entry (waystones:relative_pos_attunement) is missing "
+            "from local registry (minecraft:data_component_type)\n"
+            "[19:03:41] [Render thread/WARN]: Client disconnected with reason: Received 1 registry entries "
+            "that are unknown to this client.\n")
+        win.refresh_all()
+        win.join_busy = False
+        win.check_join()
+
+        def shot():
+            save(win, "mods-app-join.png")
+            win.get_visible_dialog().force_close()
+            finish()
+        wait_for(lambda: win.get_visible_dialog() is not None, shot)
 
     def finish():
         shutil.rmtree(fake, ignore_errors=True)

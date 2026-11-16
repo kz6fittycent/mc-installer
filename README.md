@@ -47,6 +47,12 @@ Everything is downloaded from Modrinth's own servers (`cdn.modrinth.com`) and ch
 
 Playing on a server with mods? Install Fabric for the server's Minecraft version, then add the mods the server owner says players need (or import the modpack they give you). More help is on the [wiki](https://github.com/kz6fittycent/mc-installer/wiki/Mods).
 
+**Couldn't join a server?** (from 17.1)
+
+![Offering to fix a failed join](docs/screenshots/mods-app-join.png)
+
+When the server has a mod you don't, or a newer version of one, Minecraft drops you with *"Received … registry entries that are unknown to this client"*. Open MC Mods afterwards (or switch back to it): it reads the game's log, works out which mods the server has that your profile is missing or has older versions of, and offers to update or install them. Nothing changes until you press **Update Mods**. The log doesn't say which version the server has, so you get the newest build for your Minecraft version, which is what servers normally run. Then quit Minecraft, start it again and join. If a mod can't be found on Modrinth, the dialog names it so you can ask whoever runs the server.
+
 ## About
 A fork of the Minecraft-NSG installer snap. Omits the Oracle version of Java and just runs with openjdk. Skips the dialog and just downloads the .jar and runs the installer.
 

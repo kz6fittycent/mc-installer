@@ -643,11 +643,13 @@ class ModsWindow(Adw.ApplicationWindow):
             return
         game, mc = problem.game, problem.game.mc
         lines = []
+        def version(build):  # "26.2.0.14+fabric-26.2" -> "26.2.0.14"
+            return (build.get("version_number") or "").split("+")[0]
         for item, build in plan.update:
-            lines.append(f"• Update {item.title} to {build.get('version_number', 'the newest version')}")
+            lines.append(f"• Update {item.title} to {version(build) or 'the newest version'}")
         for build in plan.install:
             title = plan.titles.get(build["project_id"], build.get("name", ""))
-            lines.append(f"• Install {title} {build.get('version_number', '')}".rstrip())
+            lines.append(f"• Install {title} {version(build)}".rstrip())
         body = (f"The server has mods that “{game.name}” doesn't have, or newer versions of them.\n\n"
                 + ("\n".join(lines) + "\n\n" if lines else ""))
         if plan.current:
