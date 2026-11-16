@@ -89,6 +89,22 @@ jobs:
             [[ "$attempt" == 3 ]] && { echo "::error::snap install review-tools failed"; exit 1; }
             sleep 30
           done
+          # The security notices database, fetched here with retries instead of
+          # by review-tools: on a checksum mismatch (the .sha256 and the database
+          # come from usn.ubuntu.com separately and can be out of step) it keeps
+          # the bad file and reuses it for a day. USNDB points review-tools here.
+          export USNDB="$RUNNER_TEMP/usn-database.json"
+          for attempt in 1 2 3 4 5; do
+            if curl -fsSL --retry 3 -o "$RUNNER_TEMP/usn-database.json.sha256" https://usn.ubuntu.com/usn-db/database.json.sha256 \
+              && curl -fsSL --retry 3 -o "$USNDB" https://usn.ubuntu.com/usn-db/database.json \
+              && [[ "$(sha256sum "$USNDB" | cut -d' ' -f1)" == "$(cut -d' ' -f1 "$RUNNER_TEMP/usn-database.json.sha256")" ]]; then
+              break
+            fi
+            [[ "$attempt" == 5 ]] && { echo "::error::security notices database download failed 5 times"; exit 1; }
+            echo "::warning::security notices database download failed (attempt $attempt), retrying in 60s"
+            sleep 60
+          done
+          echo "USNDB=$USNDB" >> "$GITHUB_ENV"
 
       - name: Download the stable snap
         id: stable
@@ -191,6 +207,22 @@ jobs:
             [[ "$attempt" == 3 ]] && exit 1
             sleep 30
           done
+          # The security notices database, fetched here with retries instead of
+          # by review-tools: on a checksum mismatch (the .sha256 and the database
+          # come from usn.ubuntu.com separately and can be out of step) it keeps
+          # the bad file and reuses it for a day. USNDB points review-tools here.
+          export USNDB="$RUNNER_TEMP/usn-database.json"
+          for attempt in 1 2 3 4 5; do
+            if curl -fsSL --retry 3 -o "$RUNNER_TEMP/usn-database.json.sha256" https://usn.ubuntu.com/usn-db/database.json.sha256 \
+              && curl -fsSL --retry 3 -o "$USNDB" https://usn.ubuntu.com/usn-db/database.json \
+              && [[ "$(sha256sum "$USNDB" | cut -d' ' -f1)" == "$(cut -d' ' -f1 "$RUNNER_TEMP/usn-database.json.sha256")" ]]; then
+              break
+            fi
+            [[ "$attempt" == 5 ]] && { echo "::error::security notices database download failed 5 times"; exit 1; }
+            echo "::warning::security notices database download failed (attempt $attempt), retrying in 60s"
+            sleep 60
+          done
+          echo "USNDB=$USNDB" >> "$GITHUB_ENV"
           review-tools.snap-check-notices "${{ steps.build.outputs.snap }}" | tee rebuilt-notices.json
 
       - name: Upload to the candidate channel
