@@ -612,6 +612,85 @@ class ModsWindow(Adw.ApplicationWindow):
         self.mods.load_folders()
         self.packs.load_folders()
 
+        # A failed join to a server with other mods: offer to fix it, now and
+        # whenever the window comes back to the front (after trying to join).
+        self.join_busy = False
+        self.check_join()
+        self.connect("notify::is-active", lambda *_a: self.is_active() and self.check_join())
+
+    # --- couldn't join a server ---------------------------------------------
+
+    def check_join(self):
+        if self.join_busy:
+            return
+        self.join_busy = True
+        run_in_thread(mcmods.join_problems, self.got_join_problems)
+
+    def got_join_problems(self, problems, error):
+        if error or not problems:
+            self.join_busy = False
+            return
+        problem = problems[0]  # the others come up next time
+        toast = Adw.Toast(title=esc(f"Checking the mods {problem.server} needs…"), timeout=0)
+        self.toasts.add_toast(toast)
+        run_in_thread(mcmods.plan_join_fix, lambda plan, err: self.join_planned(toast, problem, plan, err), problem)
+
+    def join_planned(self, toast, problem, plan, error):
+        toast.dismiss()
+        if error:
+            self.join_busy = False
+            self.toasts.add_toast(Adw.Toast(title=esc(error), timeout=8))
+            return
+        game, mc = problem.game, problem.game.mc
+        lines = []
+        for item, build in plan.update:
+            lines.append(f"• Update {item.title} to {build.get('version_number', 'the newest version')}")
+        for build in plan.install:
+            title = plan.titles.get(build["project_id"], build.get("name", ""))
+            lines.append(f"• Install {title} {build.get('version_number', '')}".rstrip())
+        body = (f"The server has mods that “{game.name}” doesn't have, or newer versions of them.\n\n"
+                + ("\n".join(lines) + "\n\n" if lines else ""))
+        if plan.current:
+            names = ", ".join(i.title for i in plan.current)
+            body += (f"Already the newest for Minecraft {mc}: {names}. If you still can't join, "
+                     "the server may have an older version; ask whoever runs it.\n\n")
+        if plan.unknown:
+            body += (f"Not found on Modrinth: {', '.join(plan.unknown)}. Ask whoever runs the server for "
+                     "it, or look for it on the Mods tab.\n\n")
+        if lines:
+            body += (f"Minecraft doesn't say which versions the server has, so these are the newest for "
+                     f"Minecraft {mc}, which servers normally run. Afterwards, quit Minecraft and start it "
+                     "again, then join.")
+        dialog = Adw.AlertDialog(heading=f"Couldn't join {problem.server}", body=body.strip())
+        if plan.anything_to_do():
+            dialog.add_response("ignore", "Not Now")
+            dialog.add_response("fix", "Update Mods" if not plan.install else "Install Mods")
+            dialog.set_response_appearance("fix", Adw.ResponseAppearance.SUGGESTED)
+            dialog.set_default_response("fix")
+        else:
+            dialog.add_response("ignore", "OK")
+
+        def answered(dialog, result):
+            if dialog.choose_finish(result) == "fix":
+                toast = Adw.Toast(title="Installing mods…", timeout=0)
+                self.toasts.add_toast(toast)
+                run_in_thread(mcmods.apply_join_fix, lambda titles, err: self.join_fixed(toast, problem, titles, err),
+                              plan)
+                return
+            mcmods.forget_join_problem(problem)  # ask again only after another failed join
+            self.join_busy = False
+        dialog.choose(self, None, answered)
+
+    def join_fixed(self, toast, problem, titles, error):
+        toast.dismiss()
+        self.join_busy = False
+        if error:
+            self.toasts.add_toast(Adw.Toast(title=esc(error), timeout=8))
+            return
+        self.toasts.add_toast(Adw.Toast(
+            title=esc(f"Installed {', '.join(titles)}. Restart Minecraft, then join {problem.server}."), timeout=10))
+        self.refresh_all()
+
     # The first page's widgets, as the screenshot tool knows them.
     @property
     def versions(self):

@@ -18,11 +18,13 @@ which Modrinth looks up, so files from anywhere get their real names.
 
 import datetime
 import hashlib
+import io
 import json
 import os
 import re
 import shutil
 import tempfile
+import time
 import zipfile
 from pathlib import Path
 
@@ -796,3 +798,242 @@ def _sha512(path):
         for chunk in iter(lambda: f.read(65536), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+# --- Couldn't join a server: mods that don't match ---------------------------
+#
+# When a Fabric client and server have different mods, Fabric API's registry
+# sync drops the connection and the game's log names each registry entry the
+# client doesn't have, as namespace:path. The namespace is the mod's id. The
+# log doesn't say which version the server has, so the fix is the newest
+# build for the profile's Minecraft, which is what a server normally runs.
+
+JOIN_SEEN = ".mc-installer-join-check.json"  # in a game folder: the failure already asked about
+JOIN_MAX_AGE = 3 * 24 * 3600  # older logs are ignored
+LOG_LOADING_RE = re.compile(r"Loading Minecraft (\S+) with Fabric Loader (\S+)")
+LOG_CONNECT_RE = re.compile(r"\]: Connecting to (.+), (\d+)\s*$")
+LOG_MISSING_RE = re.compile(r"Registry entry \(([a-z0-9_.-]+):[^)]+\) is missing from local registry")
+LOG_LEFT_RE = re.compile(r"\]: (Client disconnected with reason|Stopping!)")
+# Mod ids that are Minecraft or Fabric itself, never a mod to install.
+NOT_MODS = {"minecraft", "java", "fabricloader", "c"}
+
+
+class JoinProblem:
+    """A failed join, read from a game folder's latest.log.
+
+    namespaces: mod ids the server has and this client doesn't (or has
+    an older build of). key: identifies this failure, to ask only once.
+    """
+
+    def __init__(self, game, server, namespaces, key):
+        self.game, self.server, self.namespaces, self.key = game, server, namespaces, key
+
+
+def _read_join_failure(log, mc):
+    """(server, namespaces, key) for the last join in a log, if it failed
+    because of mods. None otherwise, or if the log isn't from this Minecraft."""
+    try:
+        if time.time() - log.stat().st_mtime > JOIN_MAX_AGE:
+            return None
+        lines = log.read_text(errors="replace").splitlines()
+    except OSError:
+        return None
+    loading = next((LOG_LOADING_RE.search(l) for l in lines[:5] if LOG_LOADING_RE.search(l)), None)
+    if not loading or loading.group(1) != mc:
+        return None  # not Fabric, or another Minecraft version
+    server, namespaces, failed_at = None, [], None
+    for n, line in enumerate(lines):
+        connect = LOG_CONNECT_RE.search(line)
+        if connect:  # a new attempt: only the last one counts
+            host, port = connect.groups()
+            server = host if port == "25565" else f"{host}:{port}"
+            namespaces, failed_at = [], None
+            continue
+        missing = LOG_MISSING_RE.search(line)
+        if missing and server and missing.group(1) not in namespaces:
+            namespaces.append(missing.group(1))
+            failed_at = n
+    if not namespaces:
+        return None
+    key = hashlib.sha1("\n".join(lines[:1] + [str(failed_at), server]).encode()).hexdigest()
+    return server, namespaces, key
+
+
+def _seen_key(game):
+    try:
+        return json.loads((game.game_dir / JOIN_SEEN).read_text()).get("key")
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def join_problems():
+    """Failed joins (mods that don't match the server) not asked about yet,
+    one per Fabric profile game folder, newest Minecraft first."""
+    found, seen_dirs = [], []
+    for game in fabric_profiles():
+        if any(_same_path(game.game_dir, d) for d in seen_dirs):
+            continue  # several profiles can share a folder (and its log)
+        seen_dirs.append(game.game_dir)
+        failure = _read_join_failure(game.game_dir / "logs" / "latest.log", game.mc)
+        if failure and failure[2] != _seen_key(game):
+            found.append(JoinProblem(game, *failure))
+    return found
+
+
+def forget_join_problem(problem):
+    """Don't ask about this failed join again (a new one is still noticed)."""
+    _write_json(problem.game.game_dir / JOIN_SEEN, {"key": problem.key, "server": problem.server})
+
+
+def _mod_ids(jar):
+    """Every mod id a jar brings: its own, what it provides, and those of
+    the jars inside it (Fabric's jar-in-jar), one level down and further."""
+    ids = set()
+
+    def read(zf, depth):
+        try:
+            meta = json.loads(zf.read("fabric.mod.json"), strict=False)
+        except (KeyError, ValueError):
+            return
+        ids.add(meta.get("id"))
+        ids.update(meta.get("provides") or [])
+        if depth >= 3:
+            return
+        for inner in meta.get("jars") or []:
+            try:
+                with zipfile.ZipFile(io.BytesIO(zf.read(inner.get("file", "")))) as nested:
+                    read(nested, depth + 1)
+            except (KeyError, zipfile.BadZipFile, OSError):
+                pass
+    try:
+        with zipfile.ZipFile(jar) as zf:
+            read(zf, 0)
+    except (OSError, zipfile.BadZipFile):
+        pass
+    ids.discard(None)
+    return ids
+
+
+def _find_mod_by_id(mod_id, game, tries=4):
+    """The newest build for `game` of the Modrinth mod whose jar has id
+    `mod_id`, or None.
+
+    Modrinth doesn't know mod ids. A mod's slug is often its id (with
+    hyphens for underscores); otherwise search by the words in it. Each
+    candidate's jar is downloaded (checked as usual) and opened, so only a
+    mod that really has that id is offered.
+    """
+    candidates = list(dict.fromkeys([mod_id, mod_id.replace("_", "-")]))
+    try:
+        hits = _get_json(f"{MODRINTH_API}/search", query=mod_id.replace("_", " "), limit=tries,
+                         facets=json.dumps([["project_type:mod"], ["categories:fabric"]]
+                                           + ([[f"versions:{game.mc}"]] if game.mc else [])))
+        candidates += [h["project_id"] for h in hits.get("hits", [])]
+    except ModsError:
+        pass
+    checked = set()
+    for project in candidates:
+        try:
+            build = _newest_build(project, "mod", game)
+        except ModsError:
+            continue
+        if not build or build["project_id"] in checked:
+            continue
+        checked.add(build["project_id"])
+        with tempfile.TemporaryDirectory() as tmp:
+            try:
+                jar = _download(_primary(build), Path(tmp), ".jar")
+            except ModsError:
+                continue
+            if mod_id in _mod_ids(jar):
+                return build
+    return None
+
+
+class JoinFix:
+    """What fixing a failed join would do.
+
+    update: (Installed, newest build) for mods there's a newer build of.
+    install: builds of mods this profile doesn't have.
+    current: Installed mods already on the newest build (the server may run
+             an older one; nothing to do here).
+    unknown: namespaces with no mod found for them.
+    """
+
+    def __init__(self, problem):
+        self.problem = problem
+        self.update, self.install, self.current, self.unknown = [], [], [], []
+        self.titles = {}
+
+    def anything_to_do(self):
+        return bool(self.update or self.install)
+
+
+def plan_join_fix(problem, progress=lambda text: None):
+    """Work out which mods to update or install so the profile matches the
+    server. Changes nothing."""
+    game = problem.game
+    progress("Looking up your mods on Modrinth…")
+    have = installed("mod", game)
+    by_id = {}
+    for item in have:
+        for mod_id in _mod_ids(item.path):
+            by_id.setdefault(mod_id, item)
+    plan = JoinFix(problem)
+    handled = set()
+    for ns in problem.namespaces:
+        if ns in NOT_MODS:
+            continue
+        progress(f"Checking {ns}…")
+        item = by_id.get(ns)
+        if item:
+            if item.path in handled:
+                continue
+            handled.add(item.path)
+            build = _newest_build(item.project, "mod", game) if item.project else None
+            if not build:
+                plan.unknown.append(ns)
+            elif _primary(build)["filename"] == item.path.name:
+                plan.current.append(item)
+            else:
+                plan.update.append((item, build))
+            continue
+        build = _find_mod_by_id(ns, game)
+        if build and build["project_id"] not in {b["project_id"] for b in plan.install}:
+            plan.install.append(build)
+        elif not build:
+            plan.unknown.append(ns)
+    plan.titles = _titles([b["project_id"] for _i, b in plan.update] + [b["project_id"] for b in plan.install])
+    return plan
+
+
+def apply_join_fix(plan, progress=lambda text: None):
+    """Do what plan_join_fix() worked out. Mods are updated or installed
+    with the mods they need, as on the Mods tab. In a modpack's folder the
+    pack's record follows along, so importing the pack again still cleans up.
+    Returns the titles of what was installed."""
+    game = plan.problem.game
+    mods_dir = game.folder("mod")
+    before = {p.name for p in mods_dir.glob("*.jar")} if mods_dir.is_dir() else set()
+    done = []
+    projects = [i.project for i, _b in plan.update] + [b["project_id"] for b in plan.install]
+    for pid in projects:
+        for title in install_project(pid, "mod", game, progress):
+            if title not in done:
+                done.append(title)
+    after = {p.name for p in mods_dir.glob("*.jar")}
+
+    record = game.game_dir / PACK_RECORD
+    if record.exists():
+        try:
+            data = json.loads(record.read_text())
+            files = set(data.get("files", []))
+            rel = mods_dir.relative_to(game.game_dir)
+            files -= {str(rel / n) for n in before - after}
+            files |= {str(rel / n) for n in after - before}
+            data["files"] = sorted(files)
+            _write_json(record, data)
+        except (OSError, ValueError):
+            pass
+    forget_join_problem(plan.problem)
+    return done
