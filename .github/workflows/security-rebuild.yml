@@ -65,7 +65,23 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
+      - name: Check for a stable release
+        id: has_stable
+        run: |
+          # Nothing to rebuild while nothing is on stable - skip the rest of
+          # the job then (it ends green). A store outage must fail the job,
+          # not look like "no stable".
+          info="$(curl -fsS --retry 5 --retry-all-errors -H 'Snap-Device-Series: 16' \
+              "https://api.snapcraft.io/v2/snaps/info/${SNAP_NAME}")"
+          if jq -e '[."channel-map"[] | select(.channel.risk == "stable")] | length > 0' <<<"$info" >/dev/null; then
+            echo "stable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "stable=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::${SNAP_NAME} has no stable release - nothing to rebuild."
+          fi
+
       - name: Install review-tools
+        if: steps.has_stable.outputs.stable == 'true'
         run: |
           # Retried: the Snap Store's CDN has had transient failures.
           for attempt in 1 2 3; do
@@ -76,6 +92,7 @@ jobs:
 
       - name: Download the stable snap
         id: stable
+        if: steps.has_stable.outputs.stable == 'true'
         run: |
           snap download "$SNAP_NAME" --channel=stable --basename=stable
           version="$(unsquashfs -cat stable.snap meta/snap.yaml | sed -n 's/^version: *//p' | tr -d "'\"")"
@@ -85,6 +102,7 @@ jobs:
           echo "Stable: version $version, revision $revision"
 
       - name: Check for security notices
+        if: steps.has_stable.outputs.stable == 'true'
         run: |
           review-tools.snap-check-notices stable.snap | tee notices-raw.json
           # {"<snap>": {"<revision>": {"<package>": ["USN-...", ...]}}} - empty when none.
@@ -98,6 +116,7 @@ jobs:
 
       - name: Find the commit stable was built from
         id: commit
+        if: steps.has_stable.outputs.stable == 'true'
         env:
           REVISION: ${{ steps.stable.outputs.revision }}
         run: |
@@ -113,6 +132,7 @@ jobs:
 
       - name: Decide
         id: decide
+        if: steps.has_stable.outputs.stable == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           FORCE: ${{ inputs.force }}
@@ -135,6 +155,7 @@ jobs:
           echo "rebuild=$rebuild" >> "$GITHUB_OUTPUT"
 
       - name: Keep the notices for the next job
+        if: steps.has_stable.outputs.stable == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: notices
