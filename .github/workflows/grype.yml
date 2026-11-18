@@ -1,0 +1,81 @@
+name: 🛡️ Grype
+
+# Two scans, results in the repo's Security tab:
+# - source: known CVEs in the repo's dependencies and pinned actions.
+# - published snap (weekly or by hand): the stable and candidate snaps from
+#   the store, including the bundled OpenJDK, so a new Java security release
+#   shows up here until a rebuild picks it up.
+# Both fail on high or critical findings that have a fix available.
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  schedule:
+    - cron: '0 7 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  SNAP_NAME: mc-installer
+  GRYPE_IMAGE: anchore/grype:v0.122.1
+
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Scan dependencies
+        id: scan
+        uses: anchore/scan-action@v7
+        with:
+          path: .
+          only-fixed: true
+          severity-cutoff: high
+          fail-build: true
+          output-format: sarif
+
+      - name: Upload results to the Security tab
+        if: ${{ !cancelled() && steps.scan.outputs.sarif != '' }}
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: ${{ steps.scan.outputs.sarif }}
+          category: grype-source
+
+  published-snap:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        channel: [stable, candidate]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/grype-snap.yaml
+          sparse-checkout-cone-mode: false
+
+      # Grype reads the snap straight from the store (snap:<name>@<channel>).
+      - name: Scan the ${{ matrix.channel }} snap
+        run: |
+          mkdir -p results
+          docker run --rm -v "$PWD:/w" "$GRYPE_IMAGE" \
+            "snap:${SNAP_NAME}@${{ matrix.channel }}" \
+            -c /w/.github/grype-snap.yaml --only-fixed --fail-on high \
+            -o table -o sarif=/w/results/grype.sarif
+
+      - name: Upload results to the Security tab
+        if: ${{ !cancelled() && hashFiles('results/grype.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: results/grype.sarif
+          category: grype-snap-${{ matrix.channel }}

@@ -1,0 +1,8 @@
+# Grype settings for scanning the published snap (grype.yml).
+ignore:
+  # Python libraries staged from Ubuntu debs (python3-requests and friends).
+  # Ubuntu backports security fixes without changing the upstream version,
+  # and a snap has no dpkg database for Grype to check Ubuntu's notices
+  # against, so these would all be false "fix available" findings.
+  - package:
+      location: "/usr/lib/python3/dist-packages/**"
