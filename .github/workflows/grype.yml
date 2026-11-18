@@ -2,7 +2,7 @@ name: 🛡️ Grype
 
 # Two scans, results in the repo's Security tab:
 # - source: known CVEs in the repo's dependencies and pinned actions.
-# - published snap (weekly or by hand): the stable and candidate snaps from
+# - published snap (daily or by hand): the stable and candidate snaps from
 #   the store, including the bundled OpenJDK, so a new Java security release
 #   shows up here until a rebuild picks it up.
 # Both fail on high or critical findings that have a fix available.
@@ -12,7 +12,7 @@ on:
   pull_request:
     branches: [master]
   schedule:
-    - cron: '0 7 * * 1'
+    - cron: '0 7 * * *'
   workflow_dispatch:
 
 permissions:

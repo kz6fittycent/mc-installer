@@ -61,6 +61,12 @@ apps:
       - wayland
     environment:
       JAVA_HOME: $SNAP/usr/lib/jvm/java-25-openjdk-amd64/
+      # Java4Shell (CVE-2026-114938): a heap overflow in OpenJDK's AVX-512
+      # Base64 decoder. Every JVM started from the snap reads this,
+      # including the game on Mojang's own runtime (Java 25.0.1 here). It
+      # turns off the AVX-512 code paths. Remove it once Mojang's runtime and
+      # Ubuntu's openjdk-25 have the fix (17.0.21.1 / 21.0.13.1 / 25.0.5.1).
+      JAVA_TOOL_OPTIONS: -XX:UseAVX=2
       # Don't force __NV_PRIME_RENDER_OFFLOAD / __GLX_VENDOR_LIBRARY_NAME here:
       # on a desktop where the NVIDIA card drives the display, PRIME offload
       # leaves the game window unpainted (you see the desktop through it).
