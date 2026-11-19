@@ -39,7 +39,7 @@ jobs:
         env:
           COMMENT_BODY: ${{ github.event.comment.body }}
         run: |
-          # call-for-testing.yml writes the exact command (with the real
+          # snap-builds.yml writes the exact command (with the real
           # revision already filled in) into the issue - this only
           # accepts an exact "/promote <revision>[,<revision>...] stable
           # [done]" match, so a copy-pasted command from that issue
@@ -50,7 +50,7 @@ jobs:
           #
           # Trailing whitespace/newline is tolerated (`[[:space:]]*$`
           # rather than a bare `$`): copying the command out of the
-          # fenced code block call-for-testing.yml renders it in commonly
+          # fenced code block snap-builds.yml renders it in commonly
           # brings along a trailing newline, and GitHub's own comment box
           # does too if you hit enter after pasting - neither is a typo
           # worth failing loudly over the way a wrong revision number or

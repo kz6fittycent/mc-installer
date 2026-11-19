@@ -8,7 +8,7 @@ name: 🛡️ Security Rebuild
 #
 # 1. rebuilds the snap from the exact commit that stable revision was built
 #    from - never from master, which may hold unreleased work. That commit
-#    is the "snap-rev-<revision>" tag call-for-testing.yml pushes for every
+#    is the "snap-rev-<revision>" tag snap-builds.yml pushes for every
 #    revision it uploads, or, for revisions this workflow uploads, a
 #    "snap-rev-<revision>" line in the git notes refs/notes/snap-revisions.
 #    (The Actions token can't tag an older commit whose workflow files
@@ -238,7 +238,7 @@ jobs:
         env:
           SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
         run: |
-          # "candidate", not "latest/candidate" - see call-for-testing.yml.
+          # "candidate", not "latest/candidate" - see snap-builds.yml.
           output="$(snapcraft upload "${{ steps.build.outputs.snap }}" --release=candidate)"
           echo "$output"
           revision="$(grep -Po 'Revision \K[0-9]+' <<< "$output")"
