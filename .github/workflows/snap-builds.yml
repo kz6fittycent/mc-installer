@@ -11,6 +11,10 @@ on:
     branches: [ master ]
   pull_request:
     branches: [ master ]
+  # By hand (Actions tab -> Run workflow), from master: rebuilds and
+  # publishes a candidate of master's HEAD, e.g. to pick up an Ubuntu
+  # security fix in a bundled package (OpenJDK) with no code change.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -63,7 +67,9 @@ jobs:
 
   publish-candidate:
     needs: [build]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    if: >
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     permissions:
       contents: write
