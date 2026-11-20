@@ -55,6 +55,8 @@ apps:
       - home
       - dot-minecraft   
       - removable-media
+      # Game controllers (Controlify and other controller mods); auto-connects.
+      - joystick
       - desktop
       - desktop-legacy
       - x11
