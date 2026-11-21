@@ -5,6 +5,14 @@
 source "$(dirname "${BASH_SOURCE[0]}")/gpu-env.sh"
 fix_gpu_offload
 
+# Minecraft 26.3 and newer (SDL3) open a native Wayland window. With the
+# libwayland-client 1.22 that gpu-2404 brings, the game crashes every time
+# it quits (SIGSEGV in libwayland-client under SDL_Quit, "Exit code: 6").
+# With 1.24 it quits cleanly. The wayland part builds 1.24 into its own
+# folder (same-named files in usr/lib/x86_64-linux-gnu would be removed by
+# the cleanup part), so put that folder first.
+export LD_LIBRARY_PATH="$SNAP/usr/lib/wayland-1.24${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
 set -e
 (
 	cd $SNAP_USER_DATA

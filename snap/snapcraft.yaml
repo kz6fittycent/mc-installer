@@ -122,8 +122,35 @@ parts:
       ln -sf libflite.so.1 libflite.so
       ln -sf libflite_cmu_us_kal16.so.1 libflite_cmu_us_kal16.so
      
+  wayland:
+    # A newer libwayland-client for the game; scripts/launch puts it first
+    # on LD_LIBRARY_PATH. The 1.22 one gpu-2404 brings makes Minecraft
+    # 26.3+ crash on quit. Upstream release, signed by Simon Ser.
+    plugin: meson
+    source: https://gitlab.freedesktop.org/wayland/wayland/-/releases/1.24.0/downloads/wayland-1.24.0.tar.xz
+    source-checksum: sha256/82892487a01ad67b334eca83b54317a7c86a03a89cfadacfef5211f11a5d0536
+    meson-parameters:
+      - --prefix=/usr
+      - --libdir=lib/wayland-1.24
+      - --buildtype=release
+      - -Dlibraries=true
+      - -Dscanner=true
+      - -Dtests=false
+      - -Ddocumentation=false
+      - -Ddtd_validation=false
+    build-packages:
+      - meson
+      - ninja-build
+      - pkg-config
+      - libffi-dev
+      - libexpat1-dev
+    stage:
+      - usr/lib/wayland-1.24/libwayland-client.so*
+      - usr/lib/wayland-1.24/libwayland-cursor.so*
+      - usr/lib/wayland-1.24/libwayland-egl.so*
+
   cleanup:
-    after: 
+    after:
       - game
       - launcher
     plugin: nil
