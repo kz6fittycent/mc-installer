@@ -407,6 +407,25 @@ class BrowsePage(Adw.PreferencesPage):
         self.folder_row.connect("notify::selected", self.folder_changed)
         where.add(self.folder_row)
 
+        if kind == "resourcepack":
+            local = Adw.PreferencesGroup(
+                title="Downloaded a pack?",
+                description="For packs that aren't on Modrinth, like PureBDcraft from bdcraft.net. "
+                            "Get the .zip for your Minecraft version, then pick it here.")
+            if hasattr(Adw, "ButtonRow"):
+                self.file_button = Adw.ButtonRow(title="Install from a File…",
+                                                 start_icon_name="document-open-symbolic")
+                self.file_button.connect("activated", self.on_install_file)
+            else:
+                self.file_button = Gtk.Button(label="Install from a File…", halign=Gtk.Align.CENTER,
+                                              css_classes=["pill"])
+                self.file_button.connect("clicked", self.on_install_file)
+            self.file_button.set_sensitive(False)  # until there's a folder to install into
+            local.add(self.file_button)
+            self.add(local)
+        else:
+            self.file_button = None
+
         find = Adw.PreferencesGroup(
             title="Find on Modrinth",
             description="Fabric mods that run on your side of the game. Mods they need "
@@ -442,6 +461,8 @@ class BrowsePage(Adw.PreferencesPage):
                 ["Install Fabric first (Fabric tab)" if self.kind == "mod" else "Couldn't find Minecraft"]))
             self.folder_row.set_sensitive(False)
             self.search.set_sensitive(False)
+            if self.file_button:
+                self.file_button.set_sensitive(False)
             self.results.message("Mods need Fabric. Install it on the Fabric tab first."
                                  if self.kind == "mod" else error or "Open Minecraft once first.")
             self.installed.set_rows([])
@@ -451,6 +472,8 @@ class BrowsePage(Adw.PreferencesPage):
         self.folder_row.set_selected(keep)
         self.folder_row.set_sensitive(True)
         self.search.set_sensitive(True)
+        if self.file_button:
+            self.file_button.set_sensitive(True)
         self.folder_changed()
 
     def selected_folder(self):
@@ -528,6 +551,51 @@ class BrowsePage(Adw.PreferencesPage):
             self.window.toasts.add_toast(Adw.Toast(title=esc(f"Installed {titles[0]}{extra}")))
         self.refresh_installed()
         self.window.fabric.refresh_installed()
+
+    def on_install_file(self, *_args):
+        folder = self.selected_folder()
+        if not folder:
+            return
+        dialog = Gtk.FileDialog(title="Install a Resource Pack")
+        zips = Gtk.FileFilter(name="Resource packs (.zip)")
+        zips.add_pattern("*.zip")
+        zips.add_pattern("*.ZIP")
+        filters = Gio.ListStore.new(Gtk.FileFilter)
+        filters.append(zips)
+        dialog.set_filters(filters)
+        dialog.set_default_filter(zips)
+        downloads = GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DOWNLOAD)
+        if downloads:
+            dialog.set_initial_folder(Gio.File.new_for_path(downloads))
+
+        def picked(dialog, result):
+            try:
+                file = dialog.open_finish(result)
+            except GLib.Error:
+                return  # cancelled
+            path = file.get_path()
+            if not path:
+                self.window.toasts.add_toast(Adw.Toast(title="Couldn't open that file."))
+                return
+            self.file_button.set_sensitive(False)
+            toast = Adw.Toast(title=esc(f"Installing {Path(path).name}…"), timeout=0)
+            self.window.toasts.add_toast(toast)
+            run_in_thread(mcmods.install_pack_file,
+                          lambda result, error: self.file_installed(toast, folder, result, error), path, folder)
+        dialog.open(self.window, None, picked)
+
+    def file_installed(self, toast, folder, result, error):
+        toast.dismiss()
+        self.file_button.set_sensitive(bool(self.folders))
+        if error:
+            self.window.toasts.add_toast(Adw.Toast(title=esc(error), timeout=10))
+            return
+        name, replaced = result
+        what = "Replaced" if replaced else "Installed"
+        self.window.toasts.add_toast(Adw.Toast(
+            title=esc(f"{what} {name.removesuffix('.zip')}. Turn it on in Options › Resource Packs."),
+            timeout=8))
+        self.refresh_installed()
 
     def on_remove(self, _button, item):
         dialog = Adw.AlertDialog(heading=f"Remove {item.title}?",

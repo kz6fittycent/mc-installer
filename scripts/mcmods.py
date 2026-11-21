@@ -12,8 +12,10 @@ for one Minecraft version never load on another.
 
 Mods, resource packs and modpacks (.mrpack) only ever come from Modrinth:
 every download URL must be on cdn.modrinth.com and every file must match the
-sha512 Modrinth publishes. Installed files are told apart by their sha1,
-which Modrinth looks up, so files from anywhere get their real names.
+sha512 Modrinth publishes. The one exception is a resource pack .zip the
+player picks from their own files (install_pack_file). Installed files are
+told apart by their sha1, which Modrinth looks up, so files from anywhere
+get their real names.
 """
 
 import datetime
@@ -670,6 +672,50 @@ def remove(item):
         pass
     except OSError as e:
         raise ModsError(f"Couldn't remove {item.path.name}: {e.strerror}") from e
+
+
+def install_pack_file(path, game):
+    """Copy a resource pack .zip the player downloaded (for example from
+    bdcraft.net, which isn't on Modrinth) into `game`'s resourcepacks folder.
+
+    The zip must have pack.mcmeta at its top, or Minecraft won't list it.
+    A pack with the same file name is replaced. Returns (name, replaced).
+    """
+    src = Path(path)
+    name = src.name
+    if not name.lower().endswith(".zip") or name.startswith("."):
+        raise ModsError(f"{name} isn't a resource pack. Resource packs are .zip files.")
+    try:
+        with zipfile.ZipFile(src) as z:
+            names = z.namelist()
+            if "pack.mcmeta" not in names:
+                nested = [n for n in names if n.endswith("/pack.mcmeta") and n.count("/") == 1]
+                if nested:
+                    raise ModsError(f"{name} has the pack inside a folder ({nested[0].split('/')[0]}), "
+                                    "so Minecraft wouldn't see it. Unzip it, then zip up the folder's "
+                                    "contents, or look for the download that is the pack itself.")
+                raise ModsError(f"{name} isn't a resource pack: it has no pack.mcmeta.")
+    except zipfile.BadZipFile:
+        raise ModsError(f"{name} isn't a valid .zip file. Was the download finished?") from None
+    except OSError as e:
+        raise ModsError(f"Couldn't read {name}: {e.strerror}") from e
+
+    folder = game.folder("resourcepack")
+    target = folder / name
+    replaced = target.exists()
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(dir=folder, prefix=".download-", delete=False) as tmp:
+            try:
+                with open(src, "rb") as f:
+                    shutil.copyfileobj(f, tmp, 1 << 20)
+            except OSError:
+                Path(tmp.name).unlink(missing_ok=True)
+                raise
+        os.replace(tmp.name, target)
+    except OSError as e:
+        raise ModsError(f"Couldn't copy {name}: {e.strerror}") from e
+    return name, replaced
 
 
 # --- Modpacks (.mrpack) -----------------------------------------------------

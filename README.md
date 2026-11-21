@@ -43,6 +43,8 @@ Pick a Fabric profile, search [Modrinth](https://modrinth.com), and press **Inst
 
 The same, for resource packs. They can go in a Fabric profile or in the normal game (*Minecraft (no mods)*). After installing one, turn it on in the game: **Options › Resource Packs**.
 
+Packs that aren't on Modrinth, like PureBDcraft from bdcraft.net: download the .zip for your Minecraft version from the pack's own site, then press **Install from a File…** and pick it. The app checks it's a resource pack and copies it into the profile you picked.
+
 Everything is downloaded from Modrinth's own servers (`cdn.modrinth.com`) and checked against Modrinth's checksum before it's used.
 
 Playing on a server with mods? Install Fabric for the server's Minecraft version, then add the mods the server owner says players need (or import the modpack they give you). More help is on the [wiki](https://github.com/kz6fittycent/mc-installer/wiki/Mods).
